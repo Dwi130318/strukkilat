@@ -1,0 +1,13 @@
+{
+  "name": "StrukKilat - Cetak Struk M-Banking & Bluetooth Thermal",
+  "description": "Aplikasi OCR bukti transfer m-banking otomatis diubah menjadi struk thermal profesional dan siap cetak ke printer Bluetooth 58mm/80mm.",
+  "requestFramePermissions": [
+    "bluetooth",
+    "camera",
+    "clipboard-read",
+    "clipboard-write"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

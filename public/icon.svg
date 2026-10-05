@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <linearGradient id="paperGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f1f5f9" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)" />
+  <rect width="496" height="496" x="8" y="8" rx="102" fill="none" stroke="url(#accentGrad)" stroke-width="8" opacity="0.6" />
+
+  <!-- Printer Body -->
+  <g transform="translate(64, 64)">
+    <!-- Top Receipt Paper coming out -->
+    <path d="M74 30 L310 30 L310 170 L285 155 L260 170 L235 155 L210 170 L185 155 L160 170 L135 155 L110 170 L85 155 L74 165 Z" fill="url(#paperGrad)" />
+    
+    <!-- Paper lines -->
+    <rect x="100" y="55" width="184" height="10" rx="5" fill="#334155" opacity="0.6" />
+    <rect x="100" y="75" width="140" height="8" rx="4" fill="#64748b" opacity="0.5" />
+    <rect x="100" y="93" width="160" height="8" rx="4" fill="#64748b" opacity="0.5" />
+    <rect x="100" y="111" width="110" height="8" rx="4" fill="#64748b" opacity="0.5" />
+
+    <!-- Lightning Bolt on Paper -->
+    <path d="M230 65 L205 105 L225 105 L215 140 L250 95 L230 95 Z" fill="#f59e0b" />
+
+    <!-- Main Printer Casing -->
+    <rect x="44" y="140" width="296" height="190" rx="36" fill="#1e293b" stroke="#334155" stroke-width="6" />
+    
+    <!-- Paper Feed Slot -->
+    <rect x="68" y="146" width="248" height="14" rx="7" fill="#020617" />
+    
+    <!-- Status LED & Bluetooth symbol -->
+    <circle cx="95" cy="235" r="14" fill="#10b981" />
+    <circle cx="95" cy="235" r="22" fill="#10b981" opacity="0.25" />
+
+    <!-- Power / Feed Button -->
+    <rect x="230" y="215" width="70" height="40" rx="12" fill="#334155" />
+    <text x="265" y="240" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" text-anchor="middle">FEED</text>
+
+    <!-- Bluetooth Icon -->
+    <g transform="translate(135, 218) scale(1.2)" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M6 6 L14 14 L10 18 L10 2 L14 6 L6 14" />
+    </g>
+  </g>
+</svg>
