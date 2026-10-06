@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Clipboard, Sparkles, AlertCircle, FileImage, Check, Zap } from 'lucide-react';
+import { Upload, Camera, Clipboard, Sparkles, AlertCircle, FileImage, Check, Zap, Share2 } from 'lucide-react';
 import { ReceiptData, PlnTokenData, AppMode } from '../types/receipt';
 import { SAMPLE_RECEIPTS } from '../utils/sampleData';
 
@@ -452,6 +452,21 @@ export function UploadSection({
             </div>
           </div>
         )}
+      </div>
+
+      {/* DIRECT SHARE TIP BANNER */}
+      <div className="mt-3 p-3 bg-gradient-to-r from-indigo-950/60 to-slate-900 border border-indigo-500/30 rounded-xl flex items-center justify-between text-xs text-indigo-200">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center shrink-0 text-indigo-300">
+            <Share2 className="w-4 h-4" />
+          </div>
+          <div className="text-[11px] leading-snug">
+            <span className="font-bold text-white block text-xs">Kirim Langsung dari M-Banking (BRImo):</span>
+            <span className="text-slate-300">
+              Selesai transfer di BRImo ➡️ Tekan tombol <strong>"Bagikan / Share"</strong> ➡️ Pilih aplikasi <strong>StrukKilat</strong>!
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ERROR MESSAGE DISPLAY */}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PlnTokenData, StoreProfile, PrintSettings } from '../types/receipt';
-import { Zap, Store, Sliders, RefreshCw } from 'lucide-react';
+import { Zap, Store, Sliders, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 
 interface PlnTokenEditorProps {
   tokenData: PlnTokenData;
@@ -9,6 +9,8 @@ interface PlnTokenEditorProps {
   setStore: React.Dispatch<React.SetStateAction<StoreProfile>>;
   settings: PrintSettings;
   setSettings: React.Dispatch<React.SetStateAction<PrintSettings>>;
+  onReset?: () => void;
+  onLoadSample?: () => void;
 }
 
 export const PlnTokenEditor: React.FC<PlnTokenEditorProps> = ({
@@ -18,6 +20,8 @@ export const PlnTokenEditor: React.FC<PlnTokenEditorProps> = ({
   setStore,
   settings,
   setSettings,
+  onReset,
+  onLoadSample,
 }) => {
   const [activeTab, setActiveTab] = useState<'token' | 'toko' | 'cetak'>('token');
 
@@ -92,6 +96,41 @@ export const PlnTokenEditor: React.FC<PlnTokenEditorProps> = ({
         {/* TAB 1: DATA TOKEN PLN */}
         {activeTab === 'token' && (
           <div className="space-y-4">
+            {/* ACTION BAR: RESET & LOAD SAMPLE */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-700/60">
+              <span className="text-[11px] text-slate-400">
+                {tokenData.amount > 0 || tokenData.tokenNumber ? (
+                  <span className="text-amber-400 font-medium">● Data terisi</span>
+                ) : (
+                  <span className="text-slate-400 font-medium">○ Form kosong (siap diisi)</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                {onReset && (
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white bg-slate-700/60 hover:bg-slate-700 rounded-md transition flex items-center gap-1"
+                    title="Kosongkan semua isian form token PLN"
+                  >
+                    <RotateCcw className="w-3 h-3 text-slate-400" />
+                    <span>Kosongkan Form</span>
+                  </button>
+                )}
+                {onLoadSample && (
+                  <button
+                    type="button"
+                    onClick={onLoadSample}
+                    className="px-2.5 py-1 text-[11px] font-medium text-amber-300 hover:text-white bg-amber-600/30 hover:bg-amber-600 border border-amber-500/30 rounded-md transition flex items-center gap-1"
+                    title="Isi dengan contoh token PLN untuk dicoba"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Isi Contoh</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* 20 DIGIT TOKEN BOX (MOST IMPORTANT) */}
             <div className="p-3 bg-amber-950/40 border border-amber-500/50 rounded-lg space-y-2">
               <div className="flex items-center justify-between">

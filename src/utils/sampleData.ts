@@ -1,5 +1,46 @@
 import { ReceiptData, StoreProfile, PrintSettings, PlnTokenData } from '../types/receipt';
 
+export const EMPTY_RECEIPT: ReceiptData = {
+  id: '',
+  bankSource: '',
+  bankDestination: '',
+  recipientName: '',
+  recipientAccount: '',
+  senderName: '',
+  senderAccount: '',
+  amount: 0,
+  bankAdminFee: 0,
+  agentFee: 0,
+  totalAmount: 0,
+  transactionDate: '',
+  transactionTime: '',
+  refNumber: '',
+  transactionType: 'TRANSFER ANTAR BANK',
+  status: 'SUKSES',
+  notes: '',
+  customerName: '',
+  cashierName: '',
+  createdAt: '',
+};
+
+export const EMPTY_PLN_TOKEN: PlnTokenData = {
+  id: '',
+  meterNumber: '',
+  customerId: '',
+  customerName: '',
+  tariffPower: '',
+  tokenNumber: '',
+  kwhAmount: '',
+  amount: 0,
+  adminFee: 0,
+  agentFee: 0,
+  totalAmount: 0,
+  transactionDate: '',
+  transactionTime: '',
+  refNumber: '',
+  createdAt: '',
+};
+
 export const DEFAULT_PLN_TOKEN: PlnTokenData = {
   id: 'sample-pln-1',
   meterNumber: '32019482910',

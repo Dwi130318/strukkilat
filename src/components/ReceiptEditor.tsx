@@ -15,6 +15,8 @@ import {
   Hash,
   FileText,
   Percent,
+  RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 interface ReceiptEditorProps {
@@ -24,6 +26,8 @@ interface ReceiptEditorProps {
   setStore: React.Dispatch<React.SetStateAction<StoreProfile>>;
   settings: PrintSettings;
   setSettings: React.Dispatch<React.SetStateAction<PrintSettings>>;
+  onReset?: () => void;
+  onLoadSample?: () => void;
 }
 
 export function ReceiptEditor({
@@ -33,6 +37,8 @@ export function ReceiptEditor({
   setStore,
   settings,
   setSettings,
+  onReset,
+  onLoadSample,
 }: ReceiptEditorProps) {
   const [activeTab, setActiveTab] = useState<'transaksi' | 'toko' | 'cetak'>('transaksi');
 
@@ -107,6 +113,41 @@ export function ReceiptEditor({
         {/* TAB 1: DATA TRANSAKSI */}
         {activeTab === 'transaksi' && (
           <div className="space-y-4">
+            {/* ACTION BAR: RESET & LOAD SAMPLE */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-700/60">
+              <span className="text-[11px] text-slate-400">
+                {receipt.amount > 0 || receipt.recipientName ? (
+                  <span className="text-emerald-400 font-medium">● Data terisi</span>
+                ) : (
+                  <span className="text-slate-400 font-medium">○ Form kosong (siap diisi)</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                {onReset && (
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white bg-slate-700/60 hover:bg-slate-700 rounded-md transition flex items-center gap-1"
+                    title="Kosongkan semua isian form transaksi"
+                  >
+                    <RotateCcw className="w-3 h-3 text-slate-400" />
+                    <span>Kosongkan Form</span>
+                  </button>
+                )}
+                {onLoadSample && (
+                  <button
+                    type="button"
+                    onClick={onLoadSample}
+                    className="px-2.5 py-1 text-[11px] font-medium text-indigo-300 hover:text-white bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/30 rounded-md transition flex items-center gap-1"
+                    title="Isi dengan contoh transaksi untuk dicoba"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-400" />
+                    <span>Isi Contoh</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">

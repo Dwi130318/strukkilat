@@ -25,6 +25,8 @@ import {
   DEFAULT_PRINT_SETTINGS,
   SAMPLE_RECEIPTS,
   DEFAULT_PLN_TOKEN,
+  EMPTY_RECEIPT,
+  EMPTY_PLN_TOKEN,
 } from './utils/sampleData';
 import {
   generateReceiptEscPos,
@@ -65,20 +67,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : DEFAULT_PRINT_SETTINGS;
   });
 
-  // Transfer Receipt State (Murni tanpa biaya jasa saat awal)
-  const [receipt, setReceipt] = useState<ReceiptData>(() => ({
-    ...SAMPLE_RECEIPTS[0],
-    agentFee: 0,
-    totalAmount: SAMPLE_RECEIPTS[0].amount,
-  }));
+  // Transfer Receipt State (Mulai KOSONG saat buka aplikasi sesuai permintaan pengguna)
+  const [receipt, setReceipt] = useState<ReceiptData>(EMPTY_RECEIPT);
 
-  // PLN Token State (Murni tanpa biaya jasa saat awal)
-  const [plnToken, setPlnToken] = useState<PlnTokenData>(() => ({
-    ...DEFAULT_PLN_TOKEN,
-    adminFee: 0,
-    agentFee: 0,
-    totalAmount: DEFAULT_PLN_TOKEN.amount,
-  }));
+  // PLN Token State (Mulai KOSONG saat buka aplikasi sesuai permintaan pengguna)
+  const [plnToken, setPlnToken] = useState<PlnTokenData>(EMPTY_PLN_TOKEN);
 
   const [isProcessingOcr, setIsProcessingOcr] = useState(false);
 
@@ -242,6 +235,40 @@ export default function App() {
     };
     setPlnToken(cleanPln);
     showToast('OCR Bukti Token PLN Berhasil!', 'success');
+  };
+
+  // Reset & Sample Handlers
+  const handleResetReceipt = () => {
+    setReceipt(EMPTY_RECEIPT);
+    showToast('Form data transfer telah dikosongkan.', 'info');
+  };
+
+  const handleLoadSampleReceipt = () => {
+    const sample = SAMPLE_RECEIPTS[0];
+    setReceipt({
+      ...sample,
+      agentFee: 0,
+      totalAmount: sample.amount,
+      transactionDate: new Date().toLocaleDateString('id-ID'),
+      transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      refNumber: 'TRX' + Date.now().toString().slice(-8),
+    });
+    showToast('Contoh transaksi transfer berhasil dimuat.', 'success');
+  };
+
+  const handleResetPln = () => {
+    setPlnToken(EMPTY_PLN_TOKEN);
+    showToast('Form token listrik telah dikosongkan.', 'info');
+  };
+
+  const handleLoadSamplePln = () => {
+    setPlnToken({
+      ...DEFAULT_PLN_TOKEN,
+      transactionDate: new Date().toLocaleDateString('id-ID'),
+      transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      refNumber: 'PLN' + Date.now().toString().slice(-8),
+    });
+    showToast('Contoh token listrik berhasil dimuat.', 'success');
   };
 
   // Direct Print via Web Bluetooth (ESC/POS)
@@ -549,6 +576,8 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                 setStore={setStore}
                 settings={settings}
                 setSettings={setSettings}
+                onReset={handleResetReceipt}
+                onLoadSample={handleLoadSampleReceipt}
               />
             ) : (
               <PlnTokenEditor
@@ -558,6 +587,8 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                 setStore={setStore}
                 settings={settings}
                 setSettings={setSettings}
+                onReset={handleResetPln}
+                onLoadSample={handleLoadSamplePln}
               />
             )}
           </div>
@@ -568,13 +599,21 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className={`w-2 h-2 rounded-full animate-ping ${
-                      mode === 'pln_token' ? 'bg-amber-400' : 'bg-emerald-400'
+                    className={`w-2 h-2 rounded-full ${
+                      (mode === 'transfer' && receipt.amount > 0) || (mode === 'pln_token' && plnToken.amount > 0)
+                        ? mode === 'pln_token' ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-ping'
+                        : 'bg-slate-500'
                     }`}
                   />
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
                     {mode === 'pln_token' ? 'Pratinjau Struk Token PLN' : 'Pratinjau Struk Mini ATM'}
                   </span>
+                  {((mode === 'transfer' && !receipt.amount && !receipt.recipientName) ||
+                    (mode === 'pln_token' && !plnToken.amount && !plnToken.tokenNumber)) && (
+                    <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/60 font-medium">
+                      Kosong
+                    </span>
+                  )}
                 </div>
                 <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
                   {settings.paperWidth}

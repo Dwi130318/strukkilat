@@ -1,9 +1,13 @@
 import express from 'express';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import crypto from 'crypto';
 import { GoogleGenAI, Type } from '@google/genai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -38,19 +42,25 @@ setInterval(() => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Android PWA Web Share Target handler (Triggered when sharing from BRImo / Gallery)
-app.post('/api/share-target', upload.single('receipt_image'), (req, res) => {
+// Android PWA Web Share Target handler (Triggered when sharing from BRImo / Gallery / M-Banking)
+app.post('/api/share-target', upload.any(), (req, res) => {
   try {
-    const file = req.file;
+    const files = req.files as Express.Multer.File[] | undefined;
+    const file = (files && files.length > 0) ? files[0] : (req.file || null);
+
     if (!file) {
+      console.warn('Share target received without file, body:', req.body);
       return res.redirect(303, '/');
     }
+
     const id = crypto.randomBytes(12).toString('hex');
     sharedFilesMap.set(id, {
       buffer: file.buffer,
       mimetype: file.mimetype || 'image/jpeg',
       createdAt: Date.now(),
     });
+
+    console.log(`Successfully received shared receipt from Android (ID: ${id}, size: ${file.size} bytes)`);
     // Redirect to root with query param so React picks it up
     return res.redirect(303, `/?shared_id=${id}`);
   } catch (err) {

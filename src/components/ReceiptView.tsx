@@ -102,7 +102,7 @@ export const ReceiptView = forwardRef<HTMLDivElement, ReceiptViewProps>(
 
     // Break long refNumber into two lines if > 16 chars (exact match to user's photo!)
     const formatRefNumber = (refNum: string) => {
-      const clean = safeStr(refNum, 'TRX' + Date.now().toString().slice(-8)).replace(/\s+/g, '');
+      const clean = safeStr(refNum, '-').replace(/\s+/g, '');
       if (clean.length > 16) {
         return (
           <>
@@ -173,7 +173,7 @@ export const ReceiptView = forwardRef<HTMLDivElement, ReceiptViewProps>(
             <div className="flex items-start">
               <span className="w-[110px] shrink-0 uppercase">BANK TUJUAN</span>
               <span className="mr-2">:</span>
-              <span className="font-semibold uppercase">{safeStr(receipt.bankDestination, 'BANK TUJUAN')}</span>
+              <span className="font-semibold uppercase">{safeStr(receipt.bankDestination, '-')}</span>
             </div>
 
             {/* NO. REKENING */}
@@ -187,7 +187,7 @@ export const ReceiptView = forwardRef<HTMLDivElement, ReceiptViewProps>(
             <div className="flex items-start">
               <span className="w-[110px] shrink-0 uppercase">NAMA PENERIMA</span>
               <span className="mr-2">:</span>
-              <span className="font-semibold uppercase">{safeStr(receipt.recipientName, 'PENERIMA TRANSFER')}</span>
+              <span className="font-semibold uppercase">{safeStr(receipt.recipientName, '-')}</span>
             </div>
 
             {/* NO REFF */}

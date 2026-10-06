@@ -71,15 +71,15 @@ export const PlnTokenView = forwardRef<HTMLDivElement, PlnTokenViewProps>(
       if (digits.length === 20) {
         return `${digits.slice(0, 4)} - ${digits.slice(4, 8)} - ${digits.slice(8, 12)} - ${digits.slice(12, 16)} - ${digits.slice(16, 20)}`;
       }
-      if (digits.length >= 16) {
+      if (digits.length > 0) {
         return clean;
       }
-      return '3819 - 4820 - 1928 - 4719 - 0192';
+      return '- - - -   - - - -   - - - -   - - - -   - - - -';
     };
 
     // Format long refNumber
     const formatRefNumber = (refNum: string) => {
-      const clean = safeText(refNum, 'PLN' + Date.now().toString().slice(-8)).replace(/\s+/g, '');
+      const clean = safeText(refNum, '-').replace(/\s+/g, '');
       if (clean.length > 16) {
         return (
           <>
@@ -91,10 +91,10 @@ export const PlnTokenView = forwardRef<HTMLDivElement, PlnTokenViewProps>(
       return clean;
     };
 
-    const meterDisplay = safeText(tokenData.meterNumber, safeText(tokenData.customerId, '-'));
-    const idpelDisplay = safeText(tokenData.customerId, safeText(tokenData.meterNumber, '-'));
-    const nameDisplay = safeText(tokenData.customerName, 'PELANGGAN PLN');
-    const tariffDisplay = safeText(tokenData.tariffPower, 'R1 / 1300 VA');
+    const meterDisplay = safeText(tokenData.meterNumber, '-');
+    const idpelDisplay = safeText(tokenData.customerId, '-');
+    const nameDisplay = safeText(tokenData.customerName, '-');
+    const tariffDisplay = safeText(tokenData.tariffPower, '-');
     const kwhClean = safeText(tokenData.kwhAmount, '-');
 
     return (
