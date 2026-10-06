@@ -1,0 +1,32 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # 1. API routes for standard cPanel PHP hosting (Rumahweb)
+  RewriteRule ^api/parse-receipt/?$ api/parse-receipt.php [L,QSA]
+  RewriteRule ^api/share-target/?$ api/share-target.php [L,QSA]
+  RewriteRule ^api/shared-file/([^/]+)/?$ api/shared-file.php?id=$1 [L,QSA]
+  RewriteRule ^api/health/?$ api/health.php [L,QSA]
+
+  # 2. React SPA fallback
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Izinkan upload foto resolusi tinggi
+<IfModule mod_php.c>
+  php_value upload_max_filesize 25M
+  php_value post_max_size 50M
+  php_value memory_limit 128M
+</IfModule>
+<IfModule mod_php7.c>
+  php_value upload_max_filesize 25M
+  php_value post_max_size 50M
+  php_value memory_limit 128M
+</IfModule>
+<IfModule mod_php8.c>
+  php_value upload_max_filesize 25M
+  php_value post_max_size 50M
+  php_value memory_limit 128M
+</IfModule>

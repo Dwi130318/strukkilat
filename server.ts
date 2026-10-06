@@ -150,7 +150,8 @@ app.post('/api/parse-receipt', async (req, res) => {
         return res.json({
           success: true,
           data: fallbackPln,
-          warning: 'Koneksi AI tidak tersedia. Data draf siap diedit.',
+          warning:
+            'Kunci GEMINI_API_KEY belum terpasang di hosting Anda. Tambahkan GEMINI_API_KEY di file .env atau menu Environment Variables hosting agar fitur OCR AI dapat membaca otomatis.',
         });
       }
 
@@ -303,7 +304,8 @@ PENTING:
       return res.json({
         success: true,
         data: fallbackDraft,
-        warning: 'Koneksi AI tidak tersedia. Data draf siap diedit.',
+        warning:
+          'Kunci GEMINI_API_KEY belum terpasang di hosting Anda. Tambahkan GEMINI_API_KEY di file .env atau menu Environment Variables hosting agar fitur OCR AI dapat membaca otomatis.',
       });
     }
 
