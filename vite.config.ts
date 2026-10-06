@@ -13,22 +13,31 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: 'strukkilat-pos',
           name: 'StrukKilat.POS - Cetak Struk Transfer & Token Listrik',
           short_name: 'StrukKilat',
           description: 'Aplikasi cetak struk bukti transfer dan token listrik PLN ke printer thermal Bluetooth.',
           theme_color: '#020617',
           background_color: '#020617',
           display: 'standalone',
+          display_override: ['standalone', 'window-controls-overlay'],
           orientation: 'portrait',
           start_url: '/',
           scope: '/',
+          categories: ['business', 'finance', 'utilities'],
+          prefer_related_applications: false,
           icons: [
             {
               src: '/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
+            },
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
             },
             {
               src: '/pwa-512x512.png',
@@ -41,6 +50,22 @@ export default defineConfig(() => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
+            },
+          ],
+          screenshots: [
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              form_factor: 'narrow',
+              label: 'StrukKilat POS Layar HP',
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              form_factor: 'wide',
+              label: 'StrukKilat POS Layar Komputer',
             },
           ],
           share_target: {
