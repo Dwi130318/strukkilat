@@ -409,7 +409,7 @@ export function UploadSection({
         )}
       </div>
 
-      {/* DRAG & DROP ZONE */}
+        {/* DRAG & DROP ZONE */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -431,30 +431,6 @@ export function UploadSection({
             : 'border-slate-600 bg-slate-900/60 hover:border-slate-500'
         }`}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              processImageFile(e.target.files[0]);
-            }
-          }}
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              processImageFile(e.target.files[0]);
-            }
-          }}
-        />
-
         {isProcessing ? (
           <div className="py-6 flex flex-col items-center justify-center space-y-3">
             <div className="relative">
@@ -484,57 +460,92 @@ export function UploadSection({
           </div>
         ) : (
           <div className="space-y-4">
-            <div
-              className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center ${
-                mode === 'pln_token'
-                  ? 'bg-amber-950/60 text-amber-400 border border-amber-500/30'
-                  : 'bg-indigo-950/60 text-indigo-400 border border-indigo-500/30'
-              }`}
+            <label
+              className="cursor-pointer block touch-manipulation group"
+              title="Klik untuk memilih foto bukti transfer"
             >
-              {mode === 'pln_token' ? <Zap className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
-            </div>
+              <input
+                type="file"
+                accept="image/*,image/jpeg,image/png,image/webp,image/jpg"
+                className="sr-only"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    processImageFile(e.target.files[0]);
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <div
+                className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center transition group-hover:scale-105 ${
+                  mode === 'pln_token'
+                    ? 'bg-amber-950/60 text-amber-400 border border-amber-500/30'
+                    : 'bg-indigo-950/60 text-indigo-400 border border-indigo-500/30'
+                }`}
+              >
+                {mode === 'pln_token' ? <Zap className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
+              </div>
 
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-200">
-                Tarik & letakkan screenshot bukti {mode === 'pln_token' ? 'token PLN' : 'transfer'} ke sini
-              </p>
-              <p className="text-xs text-slate-400">
-                Atau pilih opsi unggah di bawah ini (Mendukung JPG, PNG, WEBP)
-              </p>
-            </div>
+              <div className="space-y-1 mt-3">
+                <p className="text-sm font-medium text-slate-200 group-hover:text-white transition">
+                  Tukang struk: Sentuh di sini atau pilih tombol di bawah
+                </p>
+                <p className="text-xs text-slate-400">
+                  Mendukung screenshot JPG, PNG, WEBP dari semua M-Banking
+                </p>
+              </div>
+            </label>
 
             {/* ACTION BUTTONS */}
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`px-3.5 py-2 text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 ${
+              <label
+                className={`cursor-pointer px-4 py-2.5 text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 active:scale-95 touch-manipulation select-none ${
                   mode === 'pln_token'
                     ? 'bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold'
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                 }`}
               >
-                <FileImage className="w-3.5 h-3.5" />
-                Pilih Berkas Foto
-              </button>
+                <input
+                  type="file"
+                  accept="image/*,image/jpeg,image/png,image/webp,image/jpg"
+                  className="sr-only"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      processImageFile(e.target.files[0]);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <FileImage className="w-4 h-4 shrink-0" />
+                <span>Pilih Berkas Foto</span>
+              </label>
 
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                className="px-3.5 py-2 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600 shadow transition flex items-center gap-1.5"
+              <label
+                className="cursor-pointer px-4 py-2.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600 shadow transition flex items-center gap-1.5 active:scale-95 touch-manipulation select-none"
               >
-                <Camera className="w-3.5 h-3.5" />
-                Foto Kamera Langsung
-              </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      processImageFile(e.target.files[0]);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <Camera className="w-4 h-4 shrink-0" />
+                <span>Foto Kamera Langsung</span>
+              </label>
 
               <button
                 type="button"
                 onClick={handlePasteFromClipboard}
-                className="px-3.5 py-2 text-xs font-medium bg-slate-700/80 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600 shadow transition flex items-center gap-1.5"
+                className="px-4 py-2.5 text-xs font-medium bg-slate-700/80 hover:bg-slate-600 text-slate-200 rounded-lg border border-slate-600 shadow transition flex items-center gap-1.5 active:scale-95 touch-manipulation"
                 title="Tempel dari Clipboard (Ctrl + V)"
               >
-                <Clipboard className="w-3.5 h-3.5" />
-                Tempel Screenshot (Ctrl+V)
+                <Clipboard className="w-4 h-4 shrink-0" />
+                <span>Tempel Screenshot (Ctrl+V)</span>
               </button>
             </div>
           </div>
