@@ -53,6 +53,53 @@ export function UploadSection({
     return () => clearInterval(timer);
   }, [isProcessing, mode]);
 
+  // Compress and optimize image to max 1280px to prevent 413 Payload Too Large on cPanel
+  const optimizeImageForOcr = (file: File): Promise<{ base64: string; mimeType: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawBase64 = e.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          const MAX_WIDTH = 1280;
+          const MAX_HEIGHT = 1600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+            if (width / height > MAX_WIDTH / MAX_HEIGHT) {
+              height = Math.round((height * MAX_WIDTH) / width);
+              width = MAX_WIDTH;
+            } else {
+              width = Math.round((width * MAX_HEIGHT) / height);
+              height = MAX_HEIGHT;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            resolve({ base64: compressed, mimeType: 'image/jpeg' });
+            return;
+          }
+          resolve({ base64: rawBase64, mimeType: file.type || 'image/jpeg' });
+        };
+        img.onerror = () => {
+          resolve({ base64: rawBase64, mimeType: file.type || 'image/jpeg' });
+        };
+        img.src = rawBase64;
+      };
+      reader.onerror = () => {
+        resolve({ base64: '', mimeType: 'image/jpeg' });
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handle image processing & call /api/parse-receipt
   const processImageFile = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -64,26 +111,65 @@ export function UploadSection({
     setIsProcessing(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Data = e.target?.result as string;
-        setPreviewImage(base64Data);
+      const { base64: base64Data, mimeType } = await optimizeImageForOcr(file);
+      if (!base64Data) {
+        throw new Error('Gagal memproses file gambar.');
+      }
+      setPreviewImage(base64Data);
 
+      try {
+        let res: Response;
         try {
-          const res = await fetch('/api/parse-receipt', {
+          res = await fetch('/api/parse-receipt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               imageBase64: base64Data,
-              mimeType: file.type || 'image/jpeg',
+              mimeType: mimeType,
               mode: mode,
             }),
           });
-
-          const json = await res.json();
-          if (json.warning) {
-            setErrorMessage(json.warning);
+          // Jika 404 (misal mod_rewrite cPanel mati), otomatis coba langsung ke .php
+          if (res.status === 404 || res.status === 405) {
+            res = await fetch('/api/parse-receipt.php', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imageBase64: base64Data,
+                mimeType: mimeType,
+                mode: mode,
+              }),
+            });
           }
+        } catch {
+          // Jika gagal koneksi rute pertama, coba langsung file .php
+          res = await fetch('/api/parse-receipt.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64Data,
+              mimeType: mimeType,
+              mode: mode,
+            }),
+          });
+        }
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          let errMsg = `Server HTTP ${res.status}`;
+          try {
+            const errParsed = JSON.parse(errText);
+            if (errParsed.error || errParsed.warning) errMsg = errParsed.error || errParsed.warning;
+          } catch {}
+          throw new Error(errMsg);
+        }
+
+        const json = await res.json();
+        if (json.error) {
+          setErrorMessage(json.error);
+        } else if (json.warning) {
+          setErrorMessage(json.warning);
+        }
 
           const parsed = json.data || {};
 
@@ -225,16 +311,17 @@ export function UploadSection({
             };
             onParsed(fallbackReceipt, base64Data);
           }
-          setErrorMessage('AI sedang sibuk sementara. Form struk otomatis dibuka di bawah agar Anda dapat menyesuaikan nominal & data.');
+          setErrorMessage(
+            apiErr.message ||
+            'AI sedang sibuk sementara. Form struk otomatis dibuka di bawah agar Anda dapat menyesuaikan nominal & data.'
+          );
         } finally {
           setIsProcessing(false);
         }
-      };
-      reader.readAsDataURL(file);
     } catch (err: any) {
       console.error(err);
       setIsProcessing(false);
-      setErrorMessage('Gagal membaca berkas gambar.');
+      setErrorMessage(err.message || 'Gagal membaca berkas gambar.');
     }
   };
 
