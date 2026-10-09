@@ -157,13 +157,13 @@ export const ReceiptView = forwardRef<HTMLDivElement, ReceiptViewProps>(
             </p>
           </div>
 
-          {/* 3. SECTION TITLE: STRUK TRANSFER */}
+          {/* 3. SECTION TITLE: STRUK TRANSFER (PERMANENT) */}
           <div className="text-center my-3">
             <div className="text-xs font-bold uppercase tracking-wider text-black">
               STRUK
             </div>
             <div className="text-xs font-bold uppercase tracking-wide text-black mt-0.5">
-              {receipt.transactionType || 'TRANSFER ANTAR BANK'}
+              TRANSFER ANTAR BANK
             </div>
           </div>
 
@@ -176,11 +176,11 @@ export const ReceiptView = forwardRef<HTMLDivElement, ReceiptViewProps>(
               <span className="font-semibold uppercase">{safeStr(receipt.bankDestination, '-')}</span>
             </div>
 
-            {/* NO. REKENING */}
+            {/* NO. REKENING (TANPA SPASI) */}
             <div className="flex items-start">
               <span className="w-[110px] shrink-0 uppercase">NO. REKENING</span>
               <span className="mr-2">:</span>
-              <span className="font-mono font-semibold">{safeStr(receipt.recipientAccount, '-')}</span>
+              <span className="font-mono font-semibold">{safeStr(receipt.recipientAccount, '-').replace(/\s+/g, '')}</span>
             </div>
 
             {/* NAMA PENERIMA */}

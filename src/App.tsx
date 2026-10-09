@@ -139,7 +139,7 @@ export default function App() {
             bankSource: parsed.bankSource || 'M-BANKING BRImo',
             bankDestination: parsed.bankDestination || 'BANK TUJUAN',
             recipientName: parsed.recipientName || 'PENERIMA TRANSFER',
-            recipientAccount: parsed.recipientAccount || '-',
+            recipientAccount: (parsed.recipientAccount || '-').replace(/\s+/g, ''),
             senderName: parsed.senderName || '',
             senderAccount: parsed.senderAccount || '',
             amount: nominal,
@@ -149,7 +149,7 @@ export default function App() {
             transactionDate: parsed.transactionDate || new Date().toLocaleDateString('id-ID'),
             transactionTime: parsed.transactionTime || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
             refNumber: parsed.refNumber || 'TRX' + Date.now().toString().slice(-8),
-            transactionType: parsed.transactionType || 'TRANSFER ANTAR BANK',
+            transactionType: 'TRANSFER ANTAR BANK',
             status: (parsed.status?.toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
             notes: parsed.notes || '',
             customerName: '',
@@ -401,10 +401,10 @@ ${store.storeName || 'MITRA FAMILY JUO'}
 ${store.address ? store.address + '\n' : ''}${store.postalCode ? store.postalCode + '\n' : ''}${receipt.transactionDate} ${receipt.transactionTime}
 
 STRUK
-${receipt.transactionType || 'TRANSFER ANTAR BANK'}
+TRANSFER ANTAR BANK
 
 BANK TUJUAN    : ${receipt.bankDestination.toUpperCase()}
-NO. REKENING   : ${receipt.recipientAccount}
+NO. REKENING   : ${(receipt.recipientAccount || '').replace(/\s+/g, '')}
 NAMA PENERIMA  : ${receipt.recipientName.toUpperCase()}
 NO REFF        : ${refFormatted}
 STATUS         : ${receipt.status || 'SUKSES'}

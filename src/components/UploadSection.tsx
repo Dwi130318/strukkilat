@@ -241,12 +241,15 @@ export function UploadSection({
           const bankFee = Number(parsed.bankAdminFee) || 0;
           const total = nominal + bankFee;
 
+          const srcBank = cleanStr(parsed.bankSource, 'M-BANKING');
+          const destBank = cleanStr(parsed.bankDestination, srcBank !== 'M-BANKING' ? srcBank : 'BANK TUJUAN');
+
           const newReceipt: ReceiptData = {
             id: 'receipt-' + Date.now(),
-            bankSource: cleanStr(parsed.bankSource, 'M-BANKING'),
-            bankDestination: cleanStr(parsed.bankDestination, 'BANK TUJUAN'),
+            bankSource: srcBank,
+            bankDestination: destBank,
             recipientName: cleanStr(parsed.recipientName, 'PENERIMA TRANSFER'),
-            recipientAccount: cleanStr(parsed.recipientAccount, '-'),
+            recipientAccount: cleanStr(parsed.recipientAccount, '-').replace(/\s+/g, ''),
             senderName: cleanStr(parsed.senderName, ''),
             senderAccount: cleanStr(parsed.senderAccount, ''),
             amount: nominal,
@@ -256,7 +259,7 @@ export function UploadSection({
             transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
             transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
             refNumber: cleanStr(parsed.refNumber, 'TRX' + Date.now().toString().slice(-8)),
-            transactionType: cleanStr(parsed.transactionType, 'TRANSFER ANTAR BANK'),
+            transactionType: 'TRANSFER ANTAR BANK',
             status: (cleanStr(parsed.status, 'BERHASIL').toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
             notes: cleanStr(parsed.notes, ''),
             customerName: '',

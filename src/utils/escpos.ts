@@ -175,10 +175,10 @@ export function generateReceiptEscPos(
     builder.textLine(`${receipt.transactionDate} ${receipt.transactionTime}`);
     builder.lineFeed();
 
-    // 3. Struk Title
+    // 3. Struk Title (Permanent Mini ATM style)
     builder.bold(true);
     builder.textLine('STRUK');
-    builder.textLine(receipt.transactionType || 'TRANSFER ANTAR BANK');
+    builder.textLine('TRANSFER ANTAR BANK');
     builder.bold(false);
     builder.lineFeed();
 
@@ -190,7 +190,7 @@ export function generateReceiptEscPos(
     };
 
     printRow('BANK TUJUAN', receipt.bankDestination.toUpperCase());
-    printRow('NO. REKENING', receipt.recipientAccount);
+    printRow('NO. REKENING', (receipt.recipientAccount || '').replace(/\s+/g, ''));
     printRow('NAMA PENERIMA', receipt.recipientName.toUpperCase());
 
     // Wrap long Ref Number onto 2 lines
@@ -289,7 +289,7 @@ export function generateReceiptEscPos(
   // 4. Data Transfer
   builder.twoColumns('Sumber', receipt.bankSource);
   builder.twoColumns('Bank Tujuan', receipt.bankDestination);
-  builder.twoColumns('No Rekening', receipt.recipientAccount);
+  builder.twoColumns('No Rekening', (receipt.recipientAccount || '').replace(/\s+/g, ''));
   builder.twoColumns('Penerima', receipt.recipientName);
   
   if (receipt.transactionType) {

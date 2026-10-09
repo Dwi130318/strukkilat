@@ -313,27 +313,65 @@ PENTING:
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
 
     const promptText = `
-Kamu adalah ahli OCR khusus struk dan bukti transfer m-banking & e-wallet Indonesia (BCA, Mandiri Livin', BRImo / BRI, BNI Mobile, DANA, GoPay, OVO, ShopeePay, Seabank, Bank Jago, BSI Mobile, Allo Bank, Permata, dll).
-Tolong periksa dan ekstrak seluruh informasi transfer dari gambar bukti transaksi ini secara akurat:
+Kamu adalah ahli OCR khusus struk dan bukti transfer uang untuk SEMUA BANK & E-WALLET Indonesia:
+- BCA (m-BCA, myBCA, KlikBCA)
+- Bank Mandiri (Livin' by Mandiri)
+- Bank BRI (BRImo)
+- Bank BNI (BNI Mobile, wondr by BNI)
+- Bank Syariah Indonesia (BSI Mobile)
+- Bank Jago, SeaBank, Allo Bank, Permata, Danamon, CIMB Niaga, BJB, Bank Daerah (Bank Nagari, Bank Jateng, Bank Jatim, Bank Sumut, dll)
+- DANA, GoPay, OVO, ShopeePay, LinkAja, Flip
 
-1. bankSource: Nama aplikasi / bank pengirim (misal: "BCA (m-BCA)", "Mandiri Livin'", "BRImo (Bank BRI)", "BNI Mobile", "DANA Indonesia", "Seabank", dll).
-2. bankDestination: Nama bank atau e-wallet tujuan (misal: "BRI", "BCA", "MANDIRI", "DANA", "SHOPEEPAY", dll).
+Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas dan fleksibel:
+
+1. bankSource: Nama bank / e-wallet pengirim.
+   - Perhatikan logo di pojok atas/bawah bukti transfer.
+   - Biru BCA / tulisan m-BCA / myBCA / m-Transfer -> "BCA"
+   - Emas / kuning / pita Livin' -> "MANDIRI (LIVIN')"
+   - Orange / toska BNI / wondr -> "BNI"
+   - Biru BRI / BRImo -> "BRI"
+   - Hijau toska BSI -> "BSI"
+   - Biru DANA -> "DANA", Hijau GoPay -> "GOPAY", Ungu OVO -> "OVO", Orange ShopeePay -> "SHOPEEPAY", Orange SeaBank -> "SEABANK".
+
+2. bankDestination: Nama bank atau e-wallet tujuan transfer (misal: "BRI", "BCA", "MANDIRI", "BNI", "DANA", "SHOPEEPAY", dll).
+   - Jika transfer ke SESAMA BANK (misal sesama BCA, sesama Mandiri), isi bankDestination sama dengan bankSource (misal: "BCA" atau "MANDIRI").
+
 3. recipientName: Nama lengkap pemilik rekening penerima transfer.
-4. recipientAccount: Nomor rekening atau nomor HP/Virtual Account penerima.
+
+4. recipientAccount: Nomor rekening atau nomor HP/Virtual Account penerima (ambil digit angkanya, rapat tanpa spasi).
+
 5. senderName: Nama pengirim uang (jika ada pada struk).
-6. senderAccount: Nomor rekening / no HP pengirim (jika ada pada struk).
-7. amount: Nominal uang transfer utama (harus berupa ANGKA integer murni tanpa titik/koma/Rp, contoh: 150000).
-8. bankAdminFee: Biaya admin transaksi yang tertera (integer, misal 0, 2500, atau 6500). Jika gratis atau tidak tertera biaya admin, tulis 0.
-9. transactionDate: Tanggal transaksi (format DD/MM/YYYY atau teks tanggal yang jelas seperti "05/10/2026").
+
+6. senderAccount: Nomor rekening pengirim (jika ada pada struk).
+
+7. amount: Nominal uang transfer utama (harus berupa angka integer murni tanpa Rp/titik/koma, contoh: 150000).
+
+8. bankAdminFee: Biaya admin transaksi jika tertera (misal: 0, 2500, atau 6500). Jika gratis atau tidak tertera biaya admin, tulis 0.
+
+9. transactionDate: Tanggal transaksi (format DD/MM/YYYY, misal "09/10/2026").
+
 10. transactionTime: Waktu/jam transaksi jika tertera (misal "14:25:08 WIB" atau "14:25").
-11. refNumber: Nomor referensi transaksi, No Jurnal, No Bukti, atau Transaction ID unik.
-12. transactionType: Tipe transaksi (misal "TRANSFER BI-FAST", "TRANSFER REAL TIME ONLINE", "TRANSFER SESAMA BANK", "TOP UP E-WALLET").
+
+11. refNumber: Nomor referensi transaksi, No Jurnal, No Bukti, atau Transaction ID.
+
+12. transactionType: Selalu tulis "TRANSFER ANTAR BANK".
+
 13. status: Status transaksi, utamakan "BERHASIL" atau "SUKSES".
-14. notes: Berita transfer, keterangan, atau catatan jika ada.
+
+14. notes: Berita transfer, catatan, atau keterangan jika ada.
 `;
 
     let lastError: any = null;
     let parsedData: any = null;
+
+    // Helper to safely parse numbers
+    const cleanNumber = (val: any, fallback: number = 100000): number => {
+      if (typeof val === 'number') return Math.round(val);
+      if (!val) return fallback;
+      const str = String(val).replace(/[^0-9]/g, '');
+      const parsed = parseInt(str, 10);
+      return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+    };
 
     // Try models with fallback
     for (const modelName of VISION_MODELS) {
@@ -355,7 +393,7 @@ Tolong periksa dan ekstrak seluruh informasi transfer dari gambar bukti transaks
           },
           config: {
             systemInstruction:
-              'Kamu adalah asisten OCR spesialis bukti transfer perbankan dan dompet digital Indonesia. Selalu berikan output terstruktur JSON dengan data seakurat mungkin dari gambar.',
+              'Kamu adalah asisten OCR spesialis bukti transfer perbankan dan dompet digital Indonesia. Berikan output terstruktur JSON dengan data seakurat mungkin dari gambar. Bersikaplah fleksibel dalam mendeteksi tata letak bukti transfer dari semua bank di Indonesia.',
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -364,18 +402,17 @@ Tolong periksa dan ekstrak seluruh informasi transfer dari gambar bukti transaks
                 bankDestination: { type: Type.STRING, description: 'Bank / E-Wallet tujuan transfer' },
                 recipientName: { type: Type.STRING, description: 'Nama penerima transfer' },
                 recipientAccount: { type: Type.STRING, description: 'Nomor rekening penerima' },
-                senderName: { type: Type.STRING, description: 'Nama pengirim' },
-                senderAccount: { type: Type.STRING, description: 'Nomor rekening pengirim' },
-                amount: { type: Type.INTEGER, description: 'Nominal transfer murni (tanpa admin)' },
-                bankAdminFee: { type: Type.INTEGER, description: 'Biaya admin bank jika ada' },
+                senderName: { type: Type.STRING, description: 'Nama pengirim jika ada' },
+                senderAccount: { type: Type.STRING, description: 'Nomor rekening pengirim jika ada' },
+                amount: { type: Type.INTEGER, description: 'Nominal transfer utama' },
+                bankAdminFee: { type: Type.INTEGER, description: 'Biaya admin bank' },
                 transactionDate: { type: Type.STRING, description: 'Tanggal transaksi' },
                 transactionTime: { type: Type.STRING, description: 'Waktu transaksi' },
                 refNumber: { type: Type.STRING, description: 'Nomor referensi / ID transaksi' },
-                transactionType: { type: Type.STRING, description: 'Metode transfer / jenis layanan' },
-                status: { type: Type.STRING, description: 'Status transaksi (BERHASIL/SUKSES/dll)' },
+                transactionType: { type: Type.STRING, description: 'TRANSFER ANTAR BANK' },
+                status: { type: Type.STRING, description: 'Status transaksi' },
                 notes: { type: Type.STRING, description: 'Berita atau catatan transaksi' },
               },
-              required: ['bankSource', 'bankDestination', 'recipientName', 'recipientAccount', 'amount', 'transactionDate'],
             },
           },
         });
@@ -384,7 +421,7 @@ Tolong periksa dan ekstrak seluruh informasi transfer dari gambar bukti transaks
         // Clean markdown blocks if any
         const cleanedText = rawText.replace(/```json\s*|```/g, '').trim();
         parsedData = JSON.parse(cleanedText);
-        if (parsedData && parsedData.amount !== undefined) {
+        if (parsedData) {
           break; // successfully parsed!
         }
       } catch (err: any) {
@@ -394,21 +431,26 @@ Tolong periksa dan ekstrak seluruh informasi transfer dari gambar bukti transaks
     }
 
     if (parsedData) {
+      const source = cleanField(parsedData.bankSource, fallbackDraft.bankSource);
+      const destination = cleanField(parsedData.bankDestination, source || fallbackDraft.bankDestination);
+      const recipient = cleanField(parsedData.recipientName, fallbackDraft.recipientName);
+      const account = cleanField(parsedData.recipientAccount, fallbackDraft.recipientAccount).replace(/\s+/g, '');
+
       return res.json({
         success: true,
         data: {
-          bankSource: cleanField(parsedData.bankSource, fallbackDraft.bankSource),
-          bankDestination: cleanField(parsedData.bankDestination, fallbackDraft.bankDestination),
-          recipientName: cleanField(parsedData.recipientName, fallbackDraft.recipientName),
-          recipientAccount: cleanField(parsedData.recipientAccount, fallbackDraft.recipientAccount),
+          bankSource: source,
+          bankDestination: destination,
+          recipientName: recipient,
+          recipientAccount: account,
           senderName: cleanField(parsedData.senderName, ''),
           senderAccount: cleanField(parsedData.senderAccount, ''),
-          amount: Number(parsedData.amount) || fallbackDraft.amount,
-          bankAdminFee: Number(parsedData.bankAdminFee) || 0,
+          amount: cleanNumber(parsedData.amount, fallbackDraft.amount),
+          bankAdminFee: cleanNumber(parsedData.bankAdminFee, 0),
           transactionDate: cleanField(parsedData.transactionDate, fallbackDraft.transactionDate),
           transactionTime: cleanField(parsedData.transactionTime, fallbackDraft.transactionTime),
           refNumber: cleanField(parsedData.refNumber, fallbackDraft.refNumber),
-          transactionType: cleanField(parsedData.transactionType, fallbackDraft.transactionType),
+          transactionType: 'TRANSFER ANTAR BANK',
           status: cleanField(parsedData.status, 'BERHASIL'),
           notes: cleanField(parsedData.notes, ''),
         },

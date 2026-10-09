@@ -99,20 +99,20 @@ if ($mode === 'pln_token') {
   \"refNumber\": \"string (no referensi)\"
 }";
 } else {
-    $prompt = "Kamu adalah ahli OCR khusus struk dan bukti transfer m-banking & e-wallet Indonesia (BCA, Mandiri Livin, BRImo BRI, BNI, DANA, GoPay, OVO, ShopeePay, Seabank, Jago, dll). Ekstrak seluruh informasi transfer dari gambar bukti transaksi ini dalam format JSON murni tanpa markdown:
+    $prompt = "Kamu adalah ahli OCR khusus struk dan bukti transfer uang untuk SEMUA BANK & E-WALLET Indonesia (BCA, Mandiri Livin, BRImo BRI, BNI, BSI, DANA, GoPay, OVO, ShopeePay, Seabank, Jago, Neo, dll). Ekstrak seluruh informasi transfer dari gambar bukti transaksi ini dalam format JSON murni tanpa markdown:
 {
-  \"bankSource\": \"string (nama bank pengirim, misal: BRImo (Bank BRI), BCA (m-BCA), Mandiri Livin)\",
-  \"bankDestination\": \"string (nama bank tujuan, misal: BRI, BCA, BNI, DANA, SHOPEEPAY)\",
-  \"recipientName\": \"string (nama lengkap pemilik rekening penerima)\",
+  \"bankSource\": \"string (nama bank pengirim: BCA, MANDIRI, BRI, BNI, BSI, DANA, GOPAY, OVO, SHOPEEPAY, SEABANK, dll)\",
+  \"bankDestination\": \"string (nama bank tujuan, misal: BRI, BCA, MANDIRI, BNI, DANA. Jika sesama bank isi sama dengan bankSource)\",
+  \"recipientName\": \"string (nama lengkap penerima)\",
   \"recipientAccount\": \"string (nomor rekening atau nomor HP penerima)\",
-  \"senderName\": \"string (nama pengirim)\",
-  \"senderAccount\": \"string (nomor rekening pengirim)\",
+  \"senderName\": \"string (nama pengirim jika ada)\",
+  \"senderAccount\": \"string (nomor rekening pengirim jika ada)\",
   \"amount\": integer nominal uang transfer murni tanpa titik atau Rp,
   \"bankAdminFee\": integer biaya admin bank jika ada (0 jika gratis),
   \"transactionDate\": \"string (tanggal transaksi DD/MM/YYYY)\",
   \"transactionTime\": \"string (jam transaksi misal 14:25 WIB)\",
   \"refNumber\": \"string (nomor referensi / no bukti)\",
-  \"transactionType\": \"string (misal TRANSFER ANTAR BANK)\",
+  \"transactionType\": \"TRANSFER ANTAR BANK\",
   \"status\": \"SUKSES\",
   \"notes\": \"string\"
 }";
@@ -182,6 +182,9 @@ foreach ($models as $modelName) {
 }
 
 if ($parsedResult) {
+    if (!empty($parsedResult['recipientAccount'])) {
+        $parsedResult['recipientAccount'] = preg_replace('/\s+/', '', strval($parsedResult['recipientAccount']));
+    }
     echo json_encode([
         'success' => true,
         'data' => $parsedResult
