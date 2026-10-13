@@ -369,7 +369,7 @@ ${tokenFormatted}
 ${plnToken.kwhAmount && plnToken.kwhAmount !== '-' ? `JML KWH : ${plnToken.kwhAmount}\n` : ''}--------------------------------
 
 NOMINAL TOKEN  : ${formattedAmount}
-${plnToken.agentFee > 0 ? `BIAYA JASA     : RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(plnToken.agentFee)}\n` : ''}TOTAL BAYAR    : ${formattedTotal}
+${plnToken.agentFee > 0 ? `BIAYA JASA     : RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(plnToken.agentFee)}\nTOTAL BAYAR    : ${formattedTotal}\n` : ''}
 
 ${store.footerMessage || 'INFORMASI LEBIH LANJUT, HUBUNGI'}
 ${store.callCenter || 'PLN 123 / 08001014017 (BEBAS PULSA)'}

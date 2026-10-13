@@ -419,12 +419,11 @@ export function generatePlnTokenEscPos(
   printRow('NOMINAL TOKEN', formatMiniAtmRupiah(tokenData.amount));
   if (tokenData.agentFee > 0) {
     printRow('BIAYA JASA', formatMiniAtmRupiah(tokenData.agentFee));
+    // Total Bayar (Bold) - hanya tampil jika ada biaya jasa
+    builder.bold(true);
+    printRow('TOTAL BAYAR', formatMiniAtmRupiah(tokenData.totalAmount));
+    builder.bold(false);
   }
-
-  // Total Bayar (Bold)
-  builder.bold(true);
-  printRow('TOTAL BAYAR', formatMiniAtmRupiah(tokenData.totalAmount));
-  builder.bold(false);
   builder.lineFeed();
 
   // 7. Footer

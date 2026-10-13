@@ -204,23 +204,24 @@ export const PlnTokenView = forwardRef<HTMLDivElement, PlnTokenViewProps>(
               <span className="font-mono font-medium">{formatMiniAtmRupiah(tokenData.amount)}</span>
             </div>
 
-            {/* BIAYA JASA (HANYA MUNCUL JIKA > 0) */}
+            {/* BIAYA JASA & TOTAL BAYAR (HANYA MUNCUL JIKA ADA BIAYA JASA) */}
             {tokenData.agentFee > 0 && (
-              <div className="flex items-start">
-                <span className="w-[110px] shrink-0 uppercase">BIAYA JASA</span>
-                <span className="mr-2">:</span>
-                <span className="font-mono">{formatMiniAtmRupiah(tokenData.agentFee)}</span>
-              </div>
-            )}
+              <>
+                <div className="flex items-start">
+                  <span className="w-[110px] shrink-0 uppercase">BIAYA JASA</span>
+                  <span className="mr-2">:</span>
+                  <span className="font-mono">{formatMiniAtmRupiah(tokenData.agentFee)}</span>
+                </div>
 
-            {/* TOTAL BAYAR */}
-            <div className="flex items-center text-xs font-bold text-black pt-1">
-              <span className="w-[110px] shrink-0 uppercase">TOTAL BAYAR</span>
-              <span className="mr-2">:</span>
-              <span className="font-mono text-[12.5px]">
-                {formatMiniAtmRupiah(tokenData.totalAmount)}
-              </span>
-            </div>
+                <div className="flex items-center text-xs font-bold text-black pt-1">
+                  <span className="w-[110px] shrink-0 uppercase">TOTAL BAYAR</span>
+                  <span className="mr-2">:</span>
+                  <span className="font-mono text-[12.5px]">
+                    {formatMiniAtmRupiah(tokenData.totalAmount)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* 7. FOOTER */}
