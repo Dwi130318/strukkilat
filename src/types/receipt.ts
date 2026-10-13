@@ -24,7 +24,27 @@ export interface ReceiptData {
   createdAt: string;
 }
 
-export type AppMode = 'transfer' | 'pln_token';
+export type AppMode = 'transfer' | 'pln_token' | 'virtual_account';
+
+export interface VirtualAccountData {
+  id: string;
+  bankSource: string; // misal: BRI / BRIVA, BCA, MANDIRI, BNI, PERMATA
+  vaProvider: string; // misal: BRIVA, BCA Virtual Account, Mandiri VA
+  vaNumber: string; // nomor VA rapat tanpa spasi
+  billerName: string; // Merchant / Institusi / Biller (misal: SHOPEEPAY, TOKOPEDIA, DANA TOP UP)
+  customerName: string; // Nama Pelanggan
+  amount: number; // Tagihan / Nominal
+  adminFee: number; // Admin Bank jika ada
+  agentFee: number; // Biaya Jasa Agen
+  totalAmount: number; // Total Bayar
+  transactionDate: string;
+  transactionTime: string;
+  refNumber: string;
+  status: TransactionStatus;
+  notes?: string;
+  sourceScreenshot?: string;
+  createdAt: string;
+}
 
 export interface PlnTokenData {
   id: string;

@@ -1,4 +1,4 @@
-import { ReceiptData, StoreProfile, PrintSettings, PlnTokenData } from '../types/receipt';
+import { ReceiptData, StoreProfile, PrintSettings, PlnTokenData, VirtualAccountData } from '../types/receipt';
 
 // Helper format Rupiah
 export function formatRupiah(amount: number): string {
@@ -427,6 +427,111 @@ export function generatePlnTokenEscPos(
   builder.lineFeed();
 
   // 7. Footer
+  builder.alignCenter();
+  builder.textLine(store.footerMessage || 'INFORMASI LEBIH LANJUT, HUBUNGI');
+  if (store.callCenter) {
+    builder.textLine(store.callCenter);
+  }
+  builder.lineFeed();
+  if (store.footerDisclaimer) {
+    builder.textLine(store.footerDisclaimer);
+  }
+
+  builder.cut();
+  return builder.getBytes();
+}
+
+export function generateVirtualAccountEscPos(
+  vaData: VirtualAccountData,
+  store: StoreProfile,
+  settings: PrintSettings
+): Uint8Array {
+  const builder = new EscPosBuilder(settings.paperWidth);
+
+  builder.init();
+
+  // 1. Logo
+  if (settings.logoType === 'atm_bersama') {
+    builder.alignCenter();
+    builder.bold(true);
+    builder.doubleSize(true);
+    builder.textLine('ATM Bersama');
+    builder.doubleSize(false);
+    builder.bold(false);
+    builder.lineFeed();
+  } else if (settings.logoType === 'gpn') {
+    builder.alignCenter();
+    builder.bold(true);
+    builder.textLine('[ GPN ]');
+    builder.bold(false);
+  } else if (settings.logoType === 'link') {
+    builder.alignCenter();
+    builder.bold(true);
+    builder.textLine('[ LINK ]');
+    builder.bold(false);
+  }
+
+  // 2. Header
+  builder.alignCenter();
+  builder.bold(true);
+  builder.textLine(settings.receiptTitle || 'BUKTI TRANSAKSI MINI ATM');
+  builder.bold(false);
+  builder.textLine(store.storeName || 'MITRA FAMILY JUO');
+  if (store.address) builder.textLine(store.address);
+  if (store.postalCode) builder.textLine(store.postalCode);
+  builder.textLine(`${vaData.transactionDate} ${vaData.transactionTime}`);
+  builder.lineFeed();
+
+  // 3. Struk Title
+  builder.bold(true);
+  builder.textLine('STRUK');
+  builder.textLine('PEMBAYARAN VIRTUAL ACCOUNT');
+  builder.bold(false);
+  builder.lineFeed();
+
+  // 4. Details
+  builder.alignLeft();
+  const printRow = (label: string, value: string) => {
+    const paddedLabel = (label + '              ').slice(0, 15);
+    builder.textLine(`${paddedLabel}: ${value}`);
+  };
+
+  printRow('INSTITUSI', (vaData.billerName || 'VIRTUAL ACCOUNT').toUpperCase());
+  const cleanVa = (vaData.vaNumber || '').replace(/\s+/g, '');
+  printRow('NO. VA', cleanVa);
+  printRow('NAMA', (vaData.customerName || '-').toUpperCase());
+  if (vaData.bankSource) {
+    printRow('BANK', vaData.bankSource.toUpperCase());
+  }
+
+  const cleanRef = (vaData.refNumber || '').replace(/\s+/g, '');
+  if (cleanRef.length > 16) {
+    printRow('NO REFF', cleanRef.slice(0, 16));
+    builder.textLine(`                 ${cleanRef.slice(16)}`);
+  } else {
+    printRow('NO REFF', cleanRef);
+  }
+
+  printRow('STATUS', vaData.status || 'SUKSES');
+  builder.lineFeed();
+
+  // 5. Nominal & Biaya
+  printRow('TAGIHAN', formatMiniAtmRupiah(vaData.amount));
+  if (vaData.adminFee > 0 && settings.showBankFee) {
+    printRow('BIAYA ADMIN', formatMiniAtmRupiah(vaData.adminFee));
+  }
+  if (vaData.agentFee > 0) {
+    printRow('BIAYA JASA', formatMiniAtmRupiah(vaData.agentFee));
+  }
+
+  if (vaData.agentFee > 0 || (vaData.adminFee > 0 && settings.showBankFee)) {
+    builder.bold(true);
+    printRow('TOTAL BAYAR', formatMiniAtmRupiah(vaData.totalAmount));
+    builder.bold(false);
+  }
+  builder.lineFeed();
+
+  // 6. Footer
   builder.alignCenter();
   builder.textLine(store.footerMessage || 'INFORMASI LEBIH LANJUT, HUBUNGI');
   if (store.callCenter) {

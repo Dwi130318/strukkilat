@@ -282,6 +282,134 @@ PENTING:
       });
     }
 
+    // =========================================================================
+    // MODE 3: VIRTUAL ACCOUNT PARSING
+    // =========================================================================
+    if (mode === 'virtual_account') {
+      const fallbackVa = {
+        bankSource: 'BRI',
+        vaProvider: 'BRIVA',
+        vaNumber: '1280081298765432',
+        billerName: 'SHOPEEPAY INDONESIA',
+        customerName: 'DWI KURNIAWAN',
+        amount: 250000,
+        adminFee: 0,
+        transactionDate: now.toLocaleDateString('id-ID'),
+        transactionTime: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+        refNumber: 'BRIVA' + Date.now().toString().slice(-8),
+        status: 'SUKSES',
+        notes: '',
+      };
+
+      if (!ai) {
+        return res.json({
+          success: true,
+          data: fallbackVa,
+          warning: 'Kunci GEMINI_API_KEY belum terpasang di hosting Anda.',
+        });
+      }
+
+      const promptVa = `
+Kamu adalah ahli OCR khusus struk dan bukti pembayaran VIRTUAL ACCOUNT di Indonesia (BRIVA BRI, BCA Virtual Account, Mandiri VA Livin', BNI VA, Permata VA, ShopeePay VA, Tokopedia VA, DANA VA, dll).
+Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secara sangat akurat:
+1. vaNumber: Nomor Virtual Account / Kode Bayar (ambil semua digit angkanya, rapat tanpa spasi).
+2. billerName: Nama Merchant / Perusahaan / Institusi yang dibayar (contoh: SHOPEEPAY, TOKOPEDIA, DANA, TIKET.COM, RUANGGURU, INDOMARET, dll).
+3. customerName: Nama Pelanggan / Pemilik Tagihan.
+4. bankSource: Bank penyedia atau aplikasi yang digunakan (misal: BRI / BRIVA, BCA, MANDIRI, BNI, PERMATA).
+5. amount: Nominal tagihan / jumlah bayar murni (integer tanpa titik/koma/Rp).
+6. adminFee: Biaya admin transaksi jika ada (integer, 0 jika gratis).
+7. transactionDate: Tanggal transaksi (format DD/MM/YYYY).
+8. transactionTime: Waktu/jam transaksi jika tertera.
+9. refNumber: Nomor referensi transaksi atau ID transaksi unik.
+10. status: Status transaksi (SUKSES/BERHASIL).
+11. notes: Catatan jika ada.
+`;
+
+      const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+      let parsedVa: any = null;
+
+      const cleanNumber = (val: any, fallback: number = 100000): number => {
+        if (typeof val === 'number') return Math.round(val);
+        if (!val) return fallback;
+        const str = String(val).replace(/[^0-9]/g, '');
+        const parsed = parseInt(str, 10);
+        return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+      };
+
+      for (const modelName of VISION_MODELS) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    data: cleanBase64,
+                    mimeType: mimeType || 'image/jpeg',
+                  },
+                },
+                { text: promptVa },
+              ],
+            },
+            config: {
+              systemInstruction: 'Kamu adalah asisten OCR spesialis bukti pembayaran Virtual Account Indonesia.',
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  vaNumber: { type: Type.STRING, description: 'Nomor Virtual Account' },
+                  billerName: { type: Type.STRING, description: 'Nama Institusi / Merchant' },
+                  customerName: { type: Type.STRING, description: 'Nama Pelanggan' },
+                  bankSource: { type: Type.STRING, description: 'Bank Penyedia VA' },
+                  amount: { type: Type.INTEGER, description: 'Nominal tagihan' },
+                  adminFee: { type: Type.INTEGER, description: 'Biaya admin' },
+                  transactionDate: { type: Type.STRING, description: 'Tanggal transaksi' },
+                  transactionTime: { type: Type.STRING, description: 'Waktu transaksi' },
+                  refNumber: { type: Type.STRING, description: 'Nomor referensi' },
+                  status: { type: Type.STRING, description: 'Status transaksi' },
+                  notes: { type: Type.STRING, description: 'Catatan' },
+                },
+              },
+            },
+          });
+
+          const rawText = response.text || '{}';
+          const cleanedText = rawText.replace(/```json\s*|```/g, '').trim();
+          parsedVa = JSON.parse(cleanedText);
+          if (parsedVa) break;
+        } catch (err: any) {
+          console.warn(`Model ${modelName} failed on VA:`, err.message || err);
+        }
+      }
+
+      if (parsedVa) {
+        const cleanVaNo = cleanField(parsedVa.vaNumber, fallbackVa.vaNumber).replace(/\s+/g, '');
+        return res.json({
+          success: true,
+          data: {
+            bankSource: cleanField(parsedVa.bankSource, fallbackVa.bankSource),
+            vaProvider: cleanField(parsedVa.bankSource ? `${parsedVa.bankSource} VA` : 'VIRTUAL ACCOUNT', 'BRIVA'),
+            vaNumber: cleanVaNo,
+            billerName: cleanField(parsedVa.billerName, fallbackVa.billerName),
+            customerName: cleanField(parsedVa.customerName, fallbackVa.customerName),
+            amount: cleanNumber(parsedVa.amount, fallbackVa.amount),
+            adminFee: cleanNumber(parsedVa.adminFee, 0),
+            transactionDate: cleanField(parsedVa.transactionDate, fallbackVa.transactionDate),
+            transactionTime: cleanField(parsedVa.transactionTime, fallbackVa.transactionTime),
+            refNumber: cleanField(parsedVa.refNumber, fallbackVa.refNumber),
+            status: cleanField(parsedVa.status, 'SUKSES'),
+            notes: cleanField(parsedVa.notes, ''),
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: fallbackVa,
+        warning: 'AI sedang sibuk, draf Virtual Account telah dimuat.',
+      });
+    }
+
     // Default fallback draft in case AI is busy or image is difficult to read
     const fallbackDraft = {
       bankSource: 'M-BANKING',

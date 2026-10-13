@@ -98,6 +98,21 @@ if ($mode === 'pln_token') {
   \"transactionTime\": \"string (HH:MM WIB)\",
   \"refNumber\": \"string (no referensi)\"
 }";
+} elseif ($mode === 'virtual_account') {
+    $prompt = "Kamu adalah ahli OCR khusus bukti pembayaran VIRTUAL ACCOUNT di Indonesia (BRIVA, BCA VA, Mandiri VA, BNI VA, Permata VA, ShopeePay VA, Tokopedia VA, DANA VA, dll). Ekstrak data pembayaran Virtual Account dalam format JSON murni tanpa markdown:
+{
+  \"vaNumber\": \"string (nomor VA rapat tanpa spasi)\",
+  \"billerName\": \"string (nama merchant/institusi/perusahaan: misal SHOPEEPAY, TOKOPEDIA, DANA, TIKET.COM)\",
+  \"customerName\": \"string (nama pelanggan)\",
+  \"bankSource\": \"string (bank penyedia VA misal BRI, BCA, MANDIRI, BNI)\",
+  \"amount\": integer nominal tagihan murni tanpa titik,
+  \"adminFee\": integer biaya admin (0 jika gratis),
+  \"transactionDate\": \"string (DD/MM/YYYY)\",
+  \"transactionTime\": \"string (HH:MM WIB)\",
+  \"refNumber\": \"string (no referensi)\",
+  \"status\": \"SUKSES\",
+  \"notes\": \"string\"
+}";
 } else {
     $prompt = "Kamu adalah ahli OCR khusus struk dan bukti transfer uang untuk SEMUA BANK & E-WALLET Indonesia (BCA, Mandiri Livin, BRImo BRI, BNI, BSI, DANA, GoPay, OVO, ShopeePay, Seabank, Jago, Neo, dll). Ekstrak seluruh informasi transfer dari gambar bukti transaksi ini dalam format JSON murni tanpa markdown:
 {

@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Clipboard, Sparkles, AlertCircle, FileImage, Check, Zap, Share2 } from 'lucide-react';
-import { ReceiptData, PlnTokenData, AppMode } from '../types/receipt';
-import { SAMPLE_RECEIPTS } from '../utils/sampleData';
+import { Upload, Camera, Clipboard, Sparkles, AlertCircle, FileImage, Check, Zap, Share2, CreditCard } from 'lucide-react';
+import { ReceiptData, PlnTokenData, VirtualAccountData, AppMode } from '../types/receipt';
+import { SAMPLE_RECEIPTS, SAMPLE_VIRTUAL_ACCOUNTS } from '../utils/sampleData';
 
 interface UploadSectionProps {
   mode: AppMode;
   onParsed: (receipt: ReceiptData, imageSrc?: string) => void;
   onParsedPln?: (plnData: PlnTokenData, imageSrc?: string) => void;
+  onParsedVa?: (vaData: VirtualAccountData, imageSrc?: string) => void;
   isProcessing: boolean;
   setIsProcessing: (val: boolean) => void;
   defaultAgentFee: number;
@@ -16,6 +17,7 @@ export function UploadSection({
   mode,
   onParsed,
   onParsedPln,
+  onParsedVa,
   isProcessing,
   setIsProcessing,
   defaultAgentFee,
@@ -37,6 +39,13 @@ export function UploadSection({
             'Mendeteksi 20 digit nomor STROOM / TOKEN...',
             'Mengekstrak IDPEL, Nomor Meter, & Nama Pelanggan...',
             'Menyusun format struk thermal token PLN...',
+          ]
+        : mode === 'virtual_account'
+        ? [
+            'Membaca bukti pembayaran Virtual Account...',
+            'Mendeteksi nomor VA, Institusi / Biller, & Pelanggan...',
+            'Mengekstrak nominal tagihan & kode referensi...',
+            'Menyusun format struk Virtual Account...',
           ]
         : [
             'Membaca gambar screenshot m-banking...',
@@ -236,6 +245,38 @@ export function UploadSection({
             return;
           }
 
+          // VIRTUAL ACCOUNT PARSING
+          if (mode === 'virtual_account' && onParsedVa) {
+            const nominal = Number(parsed.amount) || 250000;
+            const admin = Number(parsed.adminFee) || 0;
+            const cleanVa = cleanStr(parsed.vaNumber, '1280081298765432').replace(/\s+/g, '');
+            const biller = cleanStr(parsed.billerName, 'VIRTUAL ACCOUNT');
+            const cust = cleanStr(parsed.customerName, 'PELANGGAN VA');
+            const bank = cleanStr(parsed.bankSource, 'BRI');
+
+            const newVa: VirtualAccountData = {
+              id: 'va-' + Date.now(),
+              bankSource: bank,
+              vaProvider: cleanStr(parsed.vaProvider, bank ? `${bank} VA` : 'VIRTUAL ACCOUNT'),
+              vaNumber: cleanVa,
+              billerName: biller,
+              customerName: cust,
+              amount: nominal,
+              adminFee: admin,
+              agentFee: 0,
+              totalAmount: nominal + admin,
+              transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
+              transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
+              refNumber: cleanStr(parsed.refNumber, 'VA' + Date.now().toString().slice(-8)),
+              status: (cleanStr(parsed.status, 'SUKSES').toUpperCase().includes('BERHASIL') ? 'BERHASIL' : 'SUKSES') as any,
+              notes: cleanStr(parsed.notes, ''),
+              sourceScreenshot: base64Data,
+              createdAt: new Date().toISOString(),
+            };
+            onParsedVa(newVa, base64Data);
+            return;
+          }
+
           // TRANSFER RECEIPT PARSING
           const nominal = Number(parsed.amount) || 100000;
           const bankFee = Number(parsed.bankAdminFee) || 0;
@@ -291,6 +332,27 @@ export function UploadSection({
               createdAt: new Date().toISOString(),
             };
             onParsedPln(fallbackPln, base64Data);
+          } else if (mode === 'virtual_account' && onParsedVa) {
+            const fallbackVa: VirtualAccountData = {
+              id: 'va-' + Date.now(),
+              bankSource: 'BRI',
+              vaProvider: 'BRIVA',
+              vaNumber: '1280081298765432',
+              billerName: 'SHOPEEPAY INDONESIA',
+              customerName: 'DWI KURNIAWAN',
+              amount: 250000,
+              adminFee: 0,
+              agentFee: 0,
+              totalAmount: 250000,
+              transactionDate: new Date().toLocaleDateString('id-ID'),
+              transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+              refNumber: 'BRIVA' + Date.now().toString().slice(-8),
+              status: 'SUKSES',
+              notes: '',
+              sourceScreenshot: base64Data,
+              createdAt: new Date().toISOString(),
+            };
+            onParsedVa(fallbackVa, base64Data);
           } else {
             const fallbackReceipt: ReceiptData = {
               id: 'receipt-' + Date.now(),
@@ -378,6 +440,11 @@ export function UploadSection({
                 <Zap className="w-5 h-5 text-amber-400" />
                 <span>Pindai Screenshot Token Listrik PLN</span>
               </>
+            ) : mode === 'virtual_account' ? (
+              <>
+                <CreditCard className="w-5 h-5 text-emerald-400" />
+                <span>Pindai Screenshot Bukti Virtual Account</span>
+              </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5 text-indigo-400" />
@@ -388,6 +455,8 @@ export function UploadSection({
           <p className="text-xs text-slate-400 mt-0.5">
             {mode === 'pln_token'
               ? 'AI otomatis mengekstrak 20 digit token, ID Pelanggan, nomor meter, tarif daya, & kWh'
+              : mode === 'virtual_account'
+              ? 'AI otomatis mendeteksi nomor VA, institusi/merchant, nama pelanggan, & nominal'
               : 'AI otomatis mendeteksi nama bank, rekening tujuan, nominal, tanggal, & kode referensi'}
           </p>
         </div>
@@ -405,6 +474,24 @@ export function UploadSection({
                   title={`Gunakan contoh ${s.bankDestination}`}
                 >
                   {idx === 0 ? 'Mini ATM (BNI)' : s.bankDestination}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'virtual_account' && onParsedVa && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-400">Contoh Cepat:</span>
+            <div className="flex gap-1.5 overflow-x-auto py-1">
+              {SAMPLE_VIRTUAL_ACCOUNTS.slice(0, 3).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onParsedVa(s)}
+                  className="px-2 py-1 text-[11px] font-medium bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 rounded border border-emerald-700/60 transition whitespace-nowrap"
+                  title={`Gunakan contoh ${s.billerName}`}
+                >
+                  {s.billerName.split(' ')[0]}
                 </button>
               ))}
             </div>
@@ -430,6 +517,8 @@ export function UploadSection({
           dragOver
             ? mode === 'pln_token'
               ? 'border-amber-400 bg-amber-950/20 scale-[0.99]'
+              : mode === 'virtual_account'
+              ? 'border-emerald-400 bg-emerald-950/20 scale-[0.99]'
               : 'border-indigo-400 bg-indigo-950/20 scale-[0.99]'
             : 'border-slate-600 bg-slate-900/60 hover:border-slate-500'
         }`}
@@ -441,12 +530,18 @@ export function UploadSection({
                 className={`w-12 h-12 border-4 rounded-full animate-spin ${
                   mode === 'pln_token'
                     ? 'border-amber-500/20 border-t-amber-400'
+                    : mode === 'virtual_account'
+                    ? 'border-emerald-500/20 border-t-emerald-400'
                     : 'border-indigo-500/20 border-t-indigo-400'
                 }`}
               />
               <Sparkles
                 className={`w-5 h-5 absolute inset-0 m-auto animate-pulse ${
-                  mode === 'pln_token' ? 'text-amber-400' : 'text-indigo-400'
+                  mode === 'pln_token'
+                    ? 'text-amber-400'
+                    : mode === 'virtual_account'
+                    ? 'text-emerald-400'
+                    : 'text-indigo-400'
                 }`}
               />
             </div>
@@ -454,7 +549,11 @@ export function UploadSection({
               <p className="text-sm font-semibold text-white">Memproses Bukti Transaksi...</p>
               <p
                 className={`text-xs mt-1 transition-all duration-300 font-mono ${
-                  mode === 'pln_token' ? 'text-amber-300' : 'text-indigo-300'
+                  mode === 'pln_token'
+                    ? 'text-amber-300'
+                    : mode === 'virtual_account'
+                    ? 'text-emerald-300'
+                    : 'text-indigo-300'
                 }`}
               >
                 {scanStep}
@@ -482,10 +581,18 @@ export function UploadSection({
                 className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center transition group-hover:scale-105 ${
                   mode === 'pln_token'
                     ? 'bg-amber-950/60 text-amber-400 border border-amber-500/30'
+                    : mode === 'virtual_account'
+                    ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-500/30'
                     : 'bg-indigo-950/60 text-indigo-400 border border-indigo-500/30'
                 }`}
               >
-                {mode === 'pln_token' ? <Zap className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
+                {mode === 'pln_token' ? (
+                  <Zap className="w-6 h-6" />
+                ) : mode === 'virtual_account' ? (
+                  <CreditCard className="w-6 h-6" />
+                ) : (
+                  <Upload className="w-6 h-6" />
+                )}
               </div>
 
               <div className="space-y-1 mt-3">
@@ -493,7 +600,11 @@ export function UploadSection({
                   Tukang struk: Sentuh di sini atau pilih tombol di bawah
                 </p>
                 <p className="text-xs text-slate-400">
-                  Mendukung screenshot JPG, PNG, WEBP dari semua M-Banking
+                  {mode === 'pln_token'
+                    ? 'Mendukung bukti pembelian token dari PLN Mobile, M-Banking, dll'
+                    : mode === 'virtual_account'
+                    ? 'Mendukung bukti bayar BRIVA, BCA VA, Mandiri VA, ShopeePay, Tokopedia, dll'
+                    : 'Mendukung screenshot JPG, PNG, WEBP dari semua M-Banking'}
                 </p>
               </div>
             </label>
@@ -504,6 +615,8 @@ export function UploadSection({
                 className={`cursor-pointer px-4 py-2.5 text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 active:scale-95 touch-manipulation select-none ${
                   mode === 'pln_token'
                     ? 'bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold'
+                    : mode === 'virtual_account'
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white font-bold'
                     : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                 }`}
               >

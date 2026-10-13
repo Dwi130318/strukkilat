@@ -1,4 +1,4 @@
-import { ReceiptData, StoreProfile, PrintSettings, PlnTokenData } from '../types/receipt';
+import { ReceiptData, StoreProfile, PrintSettings, PlnTokenData, VirtualAccountData } from '../types/receipt';
 
 export const EMPTY_RECEIPT: ReceiptData = {
   id: '',
@@ -58,6 +58,84 @@ export const DEFAULT_PLN_TOKEN: PlnTokenData = {
   refNumber: '20260916PLN101000297510',
   createdAt: new Date().toISOString(),
 };
+
+export const EMPTY_VIRTUAL_ACCOUNT: VirtualAccountData = {
+  id: '',
+  bankSource: '',
+  vaProvider: 'VIRTUAL ACCOUNT',
+  vaNumber: '',
+  billerName: '',
+  customerName: '',
+  amount: 0,
+  adminFee: 0,
+  agentFee: 0,
+  totalAmount: 0,
+  transactionDate: '',
+  transactionTime: '',
+  refNumber: '',
+  status: 'SUKSES',
+  notes: '',
+  createdAt: '',
+};
+
+export const DEFAULT_VIRTUAL_ACCOUNT: VirtualAccountData = {
+  id: 'sample-va-shopee',
+  bankSource: 'BRI',
+  vaProvider: 'BRIVA',
+  vaNumber: '1280081298765432',
+  billerName: 'SHOPEEPAY INDONESIA',
+  customerName: 'DWI KURNIAWAN',
+  amount: 250000,
+  adminFee: 0,
+  agentFee: 0,
+  totalAmount: 250000,
+  transactionDate: '13/10/2026',
+  transactionTime: '14:15 WIB',
+  refNumber: 'BRIVA202610139821034',
+  status: 'SUKSES',
+  notes: 'Top Up Saldo ShopeePay',
+  createdAt: new Date().toISOString(),
+};
+
+export const SAMPLE_VIRTUAL_ACCOUNTS: VirtualAccountData[] = [
+  DEFAULT_VIRTUAL_ACCOUNT,
+  {
+    id: 'sample-va-bca-tokopedia',
+    bankSource: 'BCA',
+    vaProvider: 'BCA VIRTUAL ACCOUNT',
+    vaNumber: '8077708512345678',
+    billerName: 'TOKOPEDIA',
+    customerName: 'SITI NURHALIZA',
+    amount: 175000,
+    adminFee: 0,
+    agentFee: 0,
+    totalAmount: 175000,
+    transactionDate: '13/10/2026',
+    transactionTime: '10:30 WIB',
+    refNumber: 'BCAVA2026101309812',
+    status: 'SUKSES',
+    notes: 'Pembayaran Pesanan Tokopedia',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sample-va-mandiri-dana',
+    bankSource: 'MANDIRI',
+    vaProvider: 'MANDIRI VIRTUAL ACCOUNT',
+    vaNumber: '8950808123456789',
+    billerName: 'DANA INDONESIA',
+    customerName: 'BUDI PRASETYO',
+    amount: 500000,
+    adminFee: 0,
+    agentFee: 0,
+    totalAmount: 500000,
+    transactionDate: '13/10/2026',
+    transactionTime: '12:05 WIB',
+    refNumber: 'MDRVA2026101344810',
+    status: 'SUKSES',
+    notes: 'Top Up Saldo DANA',
+    createdAt: new Date().toISOString(),
+  },
+];
 
 export const DEFAULT_STORE_PROFILE: StoreProfile = {
   storeName: 'MITRA FAMILY JUO',

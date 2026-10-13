@@ -52,22 +52,6 @@ export default defineConfig(() => {
               purpose: 'maskable',
             },
           ],
-          screenshots: [
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              form_factor: 'narrow',
-              label: 'StrukKilat POS Layar HP',
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              form_factor: 'wide',
-              label: 'StrukKilat POS Layar Komputer',
-            },
-          ],
           share_target: {
             action: '/api/share-target',
             method: 'POST',

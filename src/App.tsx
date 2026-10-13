@@ -15,11 +15,12 @@ import {
   RefreshCw,
   Zap,
   ArrowRightLeft,
+  CreditCard,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { toPng } from 'html-to-image';
+import { toPng, toBlob } from 'html-to-image';
 
-import { ReceiptData, StoreProfile, PrintSettings, AppMode, PlnTokenData } from './types/receipt';
+import { ReceiptData, StoreProfile, PrintSettings, AppMode, PlnTokenData, VirtualAccountData } from './types/receipt';
 import {
   DEFAULT_STORE_PROFILE,
   DEFAULT_PRINT_SETTINGS,
@@ -27,10 +28,13 @@ import {
   DEFAULT_PLN_TOKEN,
   EMPTY_RECEIPT,
   EMPTY_PLN_TOKEN,
+  EMPTY_VIRTUAL_ACCOUNT,
+  DEFAULT_VIRTUAL_ACCOUNT,
 } from './utils/sampleData';
 import {
   generateReceiptEscPos,
   generatePlnTokenEscPos,
+  generateVirtualAccountEscPos,
   printToBluetoothThermal,
   getActiveBluetoothDevice,
   getRawBtUrl,
@@ -39,15 +43,17 @@ import {
 
 import { ReceiptView } from './components/ReceiptView';
 import { PlnTokenView } from './components/PlnTokenView';
+import { VirtualAccountView } from './components/VirtualAccountView';
 import { UploadSection } from './components/UploadSection';
 import { ReceiptEditor } from './components/ReceiptEditor';
 import { PlnTokenEditor } from './components/PlnTokenEditor';
+import { VirtualAccountEditor } from './components/VirtualAccountEditor';
 import { BluetoothPrinterModal } from './components/BluetoothPrinterModal';
 import { HistoryModal } from './components/HistoryModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 
 export default function App() {
-  // Mode State: 'transfer' atau 'pln_token'
+  // Mode State: 'transfer' | 'pln_token' | 'virtual_account'
   const [mode, setMode] = useState<AppMode>('transfer');
 
   // Store & Settings State
@@ -72,6 +78,12 @@ export default function App() {
 
   // PLN Token State (Mulai KOSONG saat buka aplikasi sesuai permintaan pengguna)
   const [plnToken, setPlnToken] = useState<PlnTokenData>(EMPTY_PLN_TOKEN);
+
+  // Virtual Account State (Mulai KOSONG saat buka aplikasi)
+  const [virtualAccount, setVirtualAccount] = useState<VirtualAccountData>(() => {
+    const saved = localStorage.getItem('strukkilat_va');
+    return saved ? JSON.parse(saved) : EMPTY_VIRTUAL_ACCOUNT;
+  });
 
   const [isProcessingOcr, setIsProcessingOcr] = useState(false);
 
@@ -131,6 +143,30 @@ export default function App() {
           };
           setPlnToken(cleanPln);
           showToast('Bukti transaksi PLN siap dicetak!', 'success');
+        } else if (mode === 'virtual_account') {
+          const nominal = Number(parsed.amount) || 250000;
+          const admin = Number(parsed.adminFee) || 0;
+          const cleanVa: VirtualAccountData = {
+            id: 'va-' + Date.now(),
+            bankSource: parsed.bankSource || 'BRI',
+            vaProvider: parsed.vaProvider || 'BRIVA',
+            vaNumber: (parsed.vaNumber || '1280081298765432').replace(/\s+/g, ''),
+            billerName: parsed.billerName || 'SHOPEEPAY',
+            customerName: parsed.customerName || 'PELANGGAN VA',
+            amount: nominal,
+            adminFee: admin,
+            agentFee: 0,
+            totalAmount: nominal + admin,
+            transactionDate: parsed.transactionDate || new Date().toLocaleDateString('id-ID'),
+            transactionTime: parsed.transactionTime || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+            refNumber: parsed.refNumber || 'VA' + Date.now().toString().slice(-8),
+            status: (parsed.status?.toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
+            notes: parsed.notes || '',
+            sourceScreenshot: json.dataUrl,
+            createdAt: new Date().toISOString(),
+          };
+          setVirtualAccount(cleanVa);
+          showToast('Bukti transaksi Virtual Account siap dicetak!', 'success');
         } else {
           const nominal = Number(parsed.amount) || 100000;
           const bankFee = Number(parsed.bankAdminFee) || 0;
@@ -199,6 +235,10 @@ export default function App() {
     localStorage.setItem('strukkilat_history', JSON.stringify(history));
   }, [history]);
 
+  useEffect(() => {
+    localStorage.setItem('strukkilat_va', JSON.stringify(virtualAccount));
+  }, [virtualAccount]);
+
   // Check active bluetooth device on mount
   useEffect(() => {
     const active = getActiveBluetoothDevice();
@@ -237,6 +277,17 @@ export default function App() {
     showToast('OCR Bukti Token PLN Berhasil!', 'success');
   };
 
+  // Triggered when OCR finishes successfully for Virtual Account
+  const handleOcrParsedVa = (newVa: VirtualAccountData) => {
+    const cleanVa: VirtualAccountData = {
+      ...newVa,
+      agentFee: 0,
+      totalAmount: (Number(newVa.amount) || 0) + (Number(newVa.adminFee) || 0),
+    };
+    setVirtualAccount(cleanVa);
+    showToast('OCR Bukti Virtual Account Berhasil!', 'success');
+  };
+
   // Reset & Sample Handlers
   const handleResetReceipt = () => {
     setReceipt(EMPTY_RECEIPT);
@@ -271,6 +322,21 @@ export default function App() {
     showToast('Contoh token listrik berhasil dimuat.', 'success');
   };
 
+  const handleResetVa = () => {
+    setVirtualAccount(EMPTY_VIRTUAL_ACCOUNT);
+    showToast('Form Virtual Account telah dikosongkan.', 'info');
+  };
+
+  const handleLoadSampleVa = () => {
+    setVirtualAccount({
+      ...DEFAULT_VIRTUAL_ACCOUNT,
+      transactionDate: new Date().toLocaleDateString('id-ID'),
+      transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      refNumber: 'BRIVA' + Date.now().toString().slice(-8),
+    });
+    showToast('Contoh transaksi Virtual Account berhasil dimuat.', 'success');
+  };
+
   // Direct Print via Web Bluetooth (ESC/POS)
   const handlePrintBluetooth = async () => {
     setIsPrintingBt(true);
@@ -278,6 +344,8 @@ export default function App() {
       const escPosBytes =
         mode === 'pln_token'
           ? generatePlnTokenEscPos(plnToken, store, settings)
+          : mode === 'virtual_account'
+          ? generateVirtualAccountEscPos(virtualAccount, store, settings)
           : generateReceiptEscPos(receipt, store, settings);
 
       await printToBluetoothThermal(escPosBytes);
@@ -310,27 +378,116 @@ export default function App() {
     window.print();
   };
 
-  // Download High-Res PNG Image
+  // Generate clean filename helper
+  const getReceiptFilename = () => {
+    if (mode === 'pln_token') {
+      const cleanName = (plnToken.customerName || 'pelanggan').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+      return `struk-token-pln-${cleanName || 'token'}.png`;
+    }
+    if (mode === 'virtual_account') {
+      const cleanBiller = (virtualAccount.billerName || 'va').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+      const cleanVa = (virtualAccount.vaNumber || 'trx').replace(/\s+/g, '');
+      return `struk-va-${cleanBiller}-${cleanVa}.png`;
+    }
+    const cleanRecipient = (receipt.recipientName || 'transfer').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    const cleanRef = (receipt.refNumber || '000000').slice(-6);
+    return `struk-transfer-${cleanRecipient}-${cleanRef}.png`;
+  };
+
+  // Helper to generate image blob
+  const generateReceiptBlob = async (): Promise<Blob> => {
+    if (!receiptRef.current) throw new Error('Elemen struk belum dimuat.');
+
+    try {
+      const blob = await toBlob(receiptRef.current, {
+        pixelRatio: 2.5,
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+      });
+      if (blob) return blob;
+    } catch (e) {
+      console.warn('toBlob fallback to toPng:', e);
+    }
+
+    const dataUrl = await toPng(receiptRef.current, {
+      pixelRatio: 2.5,
+      backgroundColor: '#ffffff',
+      cacheBust: true,
+    });
+    const res = await fetch(dataUrl);
+    return await res.blob();
+  };
+
+  // Download High-Res PNG Image (Fix anchor tag and Blob URL for reliable download)
   const handleDownloadImage = async () => {
     if (!receiptRef.current) return;
     setIsExportingImage(true);
     try {
-      const dataUrl = await toPng(receiptRef.current, {
-        pixelRatio: 3,
-        backgroundColor: '#ffffff',
-      });
-      const link = document.createElement('link') as any;
-      const filename =
-        mode === 'pln_token'
-          ? `struk-token-pln-${plnToken.customerName.replace(/\s+/g, '_')}.png`
-          : `struk-transfer-${receipt.recipientName.replace(/\s+/g, '_')}-${receipt.refNumber.slice(-6)}.png`;
+      const filename = getReceiptFilename();
+      const blob = await generateReceiptBlob();
+
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
       link.download = filename;
-      link.href = dataUrl;
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
-      showToast('Gambar struk berhasil diunduh!', 'success');
+
+      setTimeout(() => {
+        try {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+      }, 2000);
+
+      showToast(`Struk "${filename}" berhasil diunduh ke folder Download!`, 'success');
     } catch (err: any) {
-      console.error(err);
-      showToast('Gagal membuat gambar struk.', 'error');
+      console.error('Download error:', err);
+      showToast('Gagal mengunduh gambar struk.', 'error');
+    } finally {
+      setIsExportingImage(false);
+    }
+  };
+
+  // Share Image directly to WhatsApp / Gallery (Android & iOS native share sheet)
+  const handleShareImage = async () => {
+    if (!receiptRef.current) return;
+    setIsExportingImage(true);
+    try {
+      const filename = getReceiptFilename();
+      const blob = await generateReceiptBlob();
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Struk Bukti Transaksi',
+          text: 'Berikut gambar bukti pembayaran struk resmi:',
+        });
+        showToast('Gambar struk berhasil dibagikan!', 'success');
+      } else {
+        // Fallback ke download jika perangkat/browser tidak support Web Share files
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(objectUrl);
+          } catch {}
+        }, 2000);
+        showToast('Gambar struk diunduh (perangkat tidak mendukung bagikan langsung).', 'info');
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Share error:', err);
+        showToast('Gagal membagikan gambar struk.', 'error');
+      }
     } finally {
       setIsExportingImage(false);
     }
@@ -386,6 +543,45 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
       return;
     }
 
+    if (mode === 'virtual_account') {
+      const cleanVa = (virtualAccount.vaNumber || '').replace(/\s+/g, '');
+      const cleanRef = (virtualAccount.refNumber || '').replace(/\s+/g, '');
+      const refFormatted = cleanRef.length > 16 ? `${cleanRef.slice(0, 16)}\n                 ${cleanRef.slice(16)}` : cleanRef;
+      const formattedAmount = `RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(virtualAccount.amount)}`;
+      const formattedTotal = `RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(virtualAccount.totalAmount)}`;
+
+      const textReceipt = `
+ATM Bersama
+${settings.receiptTitle || 'BUKTI TRANSAKSI MINI ATM'}
+${store.storeName || 'MITRA FAMILY JUO'}
+${store.address ? store.address + '\n' : ''}${store.postalCode ? store.postalCode + '\n' : ''}${virtualAccount.transactionDate} ${virtualAccount.transactionTime}
+
+STRUK
+PEMBAYARAN VIRTUAL ACCOUNT
+
+INSTITUSI      : ${(virtualAccount.billerName || 'VIRTUAL ACCOUNT').toUpperCase()}
+NO. VA         : ${cleanVa}
+NAMA           : ${(virtualAccount.customerName || '-').toUpperCase()}
+${virtualAccount.bankSource ? `BANK           : ${virtualAccount.bankSource.toUpperCase()}\n` : ''}NO REFF        : ${refFormatted}
+STATUS         : ${virtualAccount.status || 'SUKSES'}
+
+TAGIHAN / NOMINAL : ${formattedAmount}
+${virtualAccount.adminFee > 0 && settings.showBankFee ? `BIAYA ADMIN    : RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(virtualAccount.adminFee)}\n` : ''}${virtualAccount.agentFee > 0 ? `BIAYA JASA     : RP ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(virtualAccount.agentFee)}\n` : ''}${(virtualAccount.agentFee > 0 || (virtualAccount.adminFee > 0 && settings.showBankFee)) ? `TOTAL BAYAR    : ${formattedTotal}\n` : ''}
+${store.footerMessage || 'INFORMASI LEBIH LANJUT, HUBUNGI'}
+${store.callCenter || '08001014017 (BEBAS PULSA) TERIMAKASIH'}
+
+${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN YANG SAH'}
+      `.trim();
+
+      try {
+        await navigator.clipboard.writeText(textReceipt);
+        showToast('Teks struk Virtual Account disalin ke clipboard!', 'success');
+      } catch {
+        showToast('Gagal menyalin teks.', 'error');
+      }
+      return;
+    }
+
     // MODE TRANSFER TEXT
     const cleanRef = receipt.refNumber.replace(/\s+/g, '');
     const refFormatted =
@@ -433,6 +629,8 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
     const bytes =
       mode === 'pln_token'
         ? generatePlnTokenEscPos(plnToken, store, settings)
+        : mode === 'virtual_account'
+        ? generateVirtualAccountEscPos(virtualAccount, store, settings)
         : generateReceiptEscPos(receipt, store, settings);
     const rawBtUrl = getRawBtUrl(bytes);
     window.location.href = rawBtUrl;
@@ -522,33 +720,46 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
 
       {/* MAIN CONTAINER */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {/* MODE SWITCHER: 1. STRUK TRANSFER | 2. STRUK TOKEN LISTRIK */}
-        <div className="no-print max-w-lg mx-auto mb-6">
+        {/* MODE SWITCHER: 1. STRUK TRANSFER | 2. STRUK TOKEN LISTRIK | 3. VIRTUAL ACCOUNT */}
+        <div className="no-print max-w-2xl mx-auto mb-6">
           <div className="p-1 bg-slate-900 border border-slate-800 rounded-xl shadow-xl flex items-center gap-1">
             <button
               type="button"
               onClick={() => setMode('transfer')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 mode === 'transfer'
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <ArrowRightLeft className="w-4 h-4 text-cyan-300" />
+              <ArrowRightLeft className="w-4 h-4 text-cyan-300 shrink-0" />
               <span>1. Struk Transfer</span>
             </button>
 
             <button
               type="button"
               onClick={() => setMode('pln_token')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 mode === 'pln_token'
                   ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
-              <Zap className="w-4 h-4 text-amber-300" />
-              <span>2. Struk Token Listrik</span>
+              <Zap className="w-4 h-4 text-amber-300 shrink-0" />
+              <span>2. Token PLN</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode('virtual_account')}
+              className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                mode === 'virtual_account'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <CreditCard className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span>3. Virtual Account</span>
             </button>
           </div>
         </div>
@@ -562,6 +773,7 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
               mode={mode}
               onParsed={handleOcrParsed}
               onParsedPln={handleOcrParsedPln}
+              onParsedVa={handleOcrParsedVa}
               isProcessing={isProcessingOcr}
               setIsProcessing={setIsProcessingOcr}
               defaultAgentFee={store.defaultAgentFee}
@@ -579,7 +791,7 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                 onReset={handleResetReceipt}
                 onLoadSample={handleLoadSampleReceipt}
               />
-            ) : (
+            ) : mode === 'pln_token' ? (
               <PlnTokenEditor
                 tokenData={plnToken}
                 setTokenData={setPlnToken}
@@ -589,6 +801,17 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                 setSettings={setSettings}
                 onReset={handleResetPln}
                 onLoadSample={handleLoadSamplePln}
+              />
+            ) : (
+              <VirtualAccountEditor
+                vaData={virtualAccount}
+                onChangeVa={setVirtualAccount}
+                store={store}
+                onChangeStore={setStore}
+                settings={settings}
+                onChangeSettings={setSettings}
+                onReset={handleResetVa}
+                onLoadSample={handleLoadSampleVa}
               />
             )}
           </div>
@@ -600,16 +823,25 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                 <div className="flex items-center gap-2">
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      (mode === 'transfer' && receipt.amount > 0) || (mode === 'pln_token' && plnToken.amount > 0)
-                        ? mode === 'pln_token' ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-ping'
+                      (mode === 'transfer' && receipt.amount > 0) ||
+                      (mode === 'pln_token' && plnToken.amount > 0) ||
+                      (mode === 'virtual_account' && virtualAccount.amount > 0)
+                        ? mode === 'pln_token'
+                          ? 'bg-amber-400 animate-ping'
+                          : 'bg-emerald-400 animate-ping'
                         : 'bg-slate-500'
                     }`}
                   />
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    {mode === 'pln_token' ? 'Pratinjau Struk Token PLN' : 'Pratinjau Struk Mini ATM'}
+                    {mode === 'pln_token'
+                      ? 'Pratinjau Struk Token PLN'
+                      : mode === 'virtual_account'
+                      ? 'Pratinjau Struk Virtual Account'
+                      : 'Pratinjau Struk Mini ATM'}
                   </span>
                   {((mode === 'transfer' && !receipt.amount && !receipt.recipientName) ||
-                    (mode === 'pln_token' && !plnToken.amount && !plnToken.tokenNumber)) && (
+                    (mode === 'pln_token' && !plnToken.amount && !plnToken.tokenNumber) ||
+                    (mode === 'virtual_account' && !virtualAccount.amount && !virtualAccount.vaNumber)) && (
                     <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/60 font-medium">
                       Kosong
                     </span>
@@ -629,7 +861,9 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                   className={`col-span-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold shadow-lg transition flex items-center justify-center gap-2 ${
                     mode === 'pln_token'
                       ? 'bg-amber-600 hover:bg-amber-500 text-slate-950 shadow-amber-600/25 active:scale-[0.98]'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 active:scale-[0.98]'
+                      : mode === 'virtual_account'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 active:scale-[0.98]'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/25 active:scale-[0.98]'
                   }`}
                 >
                   <Bluetooth className={`w-4 h-4 ${isPrintingBt ? 'animate-spin' : ''}`} />
@@ -656,18 +890,30 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
                   onClick={handleDownloadImage}
                   disabled={isExportingImage}
                   className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                  title="Simpan file gambar PNG langsung ke folder Download"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
                   <span>{isExportingImage ? 'Menyimpan...' : 'Unduh Gambar (PNG)'}</span>
                 </button>
 
                 <button
                   type="button"
+                  onClick={handleShareImage}
+                  disabled={isExportingImage}
+                  className="py-2 px-3 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-600/50 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                  title="Bagikan gambar struk langsung ke WhatsApp / Galeri HP"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Kirim Gambar (WA)</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleCopyText}
-                  className="col-span-2 py-2 px-3 bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5"
+                  className="py-2 px-3 bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5"
                 >
                   <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Salin Teks Struk untuk WhatsApp</span>
+                  <span>Salin Teks WhatsApp</span>
                 </button>
               </div>
 
@@ -687,8 +933,10 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
             {/* THE VISUAL THERMAL RECEIPT SLIP */}
             {mode === 'transfer' ? (
               <ReceiptView ref={receiptRef} receipt={receipt} store={store} settings={settings} />
-            ) : (
+            ) : mode === 'pln_token' ? (
               <PlnTokenView ref={receiptRef} tokenData={plnToken} store={store} settings={settings} />
+            ) : (
+              <VirtualAccountView ref={receiptRef} vaData={virtualAccount} store={store} settings={settings} />
             )}
           </div>
         </div>
@@ -697,7 +945,7 @@ ${store.footerDisclaimer || 'SILAHKAN SIMPAN RESI INI SEBAGAI BUKTI PEMBAYARAN Y
       {/* FOOTER */}
       <footer className="no-print mt-auto py-6 border-t border-slate-800/80 text-center text-xs text-slate-400">
         <p>
-          StrukKilat.POS &bull; Solusi Cetak Struk Mini ATM &amp; Token Listrik Prabayar untuk Agen &amp; Konter Pulsa
+          StrukKilat.POS &bull; Solusi Cetak Struk Mini ATM, Token Listrik PLN, &amp; Virtual Account untuk Agen &amp; Konter Pulsa
         </p>
       </footer>
 
