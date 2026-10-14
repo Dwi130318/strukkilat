@@ -17,7 +17,6 @@ import {
   ArrowRightLeft,
   CreditCard,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { toPng, toBlob } from 'html-to-image';
 
 import { ReceiptData, StoreProfile, PrintSettings, AppMode, PlnTokenData, VirtualAccountData } from './types/receipt';
@@ -138,7 +137,6 @@ export default function App() {
             transactionDate: parsed.transactionDate || new Date().toLocaleDateString('id-ID'),
             transactionTime: parsed.transactionTime || new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
             refNumber: parsed.refNumber || 'PLN' + Date.now().toString().slice(-8),
-            sourceScreenshot: json.dataUrl,
             createdAt: new Date().toISOString(),
           };
           setPlnToken(cleanPln);
@@ -162,7 +160,6 @@ export default function App() {
             refNumber: parsed.refNumber || 'VA' + Date.now().toString().slice(-8),
             status: (parsed.status?.toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
             notes: parsed.notes || '',
-            sourceScreenshot: json.dataUrl,
             createdAt: new Date().toISOString(),
           };
           setVirtualAccount(cleanVa);
@@ -190,11 +187,10 @@ export default function App() {
             notes: parsed.notes || '',
             customerName: '',
             cashierName: 'Kasir',
-            sourceScreenshot: json.dataUrl,
             createdAt: new Date().toISOString(),
           };
           setReceipt(cleanReceipt);
-          setHistory((prev) => [cleanReceipt, ...prev.filter((i) => i.id !== cleanReceipt.id)].slice(0, 50));
+          setHistory((prev) => [cleanReceipt, ...prev.filter((i) => i.id !== cleanReceipt.id)].slice(0, 30));
           showToast('Bukti transfer BRImo berhasil dibaca & siap dicetak!', 'success');
         }
       } catch (err: any) {
@@ -222,21 +218,44 @@ export default function App() {
 
   const receiptRef = useRef<HTMLDivElement>(null);
 
-  // Sync state to LocalStorage
+  // Sync state to LocalStorage with fail-safe try-catch to prevent QuotaExceededError crashes
   useEffect(() => {
-    localStorage.setItem('strukkilat_store', JSON.stringify(store));
+    try {
+      localStorage.setItem('strukkilat_store', JSON.stringify(store));
+    } catch (e) {
+      console.warn('Storage warning (store):', e);
+    }
   }, [store]);
 
   useEffect(() => {
-    localStorage.setItem('strukkilat_settings', JSON.stringify(settings));
+    try {
+      localStorage.setItem('strukkilat_settings', JSON.stringify(settings));
+    } catch (e) {
+      console.warn('Storage warning (settings):', e);
+    }
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('strukkilat_history', JSON.stringify(history));
+    try {
+      // Ensure history entries never store large base64 screenshots and cap at 30 items
+      const cleanHistory = history.map(({ sourceScreenshot, ...item }) => item).slice(0, 30);
+      localStorage.setItem('strukkilat_history', JSON.stringify(cleanHistory));
+    } catch (e) {
+      console.warn('Storage warning (history):', e);
+      try {
+        const miniHistory = history.slice(0, 5).map(({ sourceScreenshot, ...item }) => item);
+        localStorage.setItem('strukkilat_history', JSON.stringify(miniHistory));
+      } catch {}
+    }
   }, [history]);
 
   useEffect(() => {
-    localStorage.setItem('strukkilat_va', JSON.stringify(virtualAccount));
+    try {
+      const { sourceScreenshot, ...cleanVa } = virtualAccount;
+      localStorage.setItem('strukkilat_va', JSON.stringify(cleanVa));
+    } catch (e) {
+      console.warn('Storage warning (virtualAccount):', e);
+    }
   }, [virtualAccount]);
 
   // Check active bluetooth device on mount
@@ -253,39 +272,54 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Triggered when OCR finishes successfully for Transfer
-  const handleOcrParsed = (newReceipt: ReceiptData) => {
+  // Triggered when OCR finishes for Transfer
+  const handleOcrParsed = (newReceipt: ReceiptData, _img?: string, isFallback?: boolean) => {
+    const { sourceScreenshot, ...cleanData } = newReceipt;
     const cleanReceipt: ReceiptData = {
-      ...newReceipt,
+      ...cleanData,
       agentFee: 0,
       totalAmount: (Number(newReceipt.amount) || 0) + (Number(newReceipt.bankAdminFee) || 0),
     };
     setReceipt(cleanReceipt);
-    setHistory((prev) => [cleanReceipt, ...prev.filter((item) => item.id !== cleanReceipt.id)].slice(0, 50));
-    showToast('OCR Bukti Transfer Berhasil!', 'success');
+    if (!isFallback) {
+      setHistory((prev) => [cleanReceipt, ...prev.filter((item) => item.id !== cleanReceipt.id)].slice(0, 30));
+      showToast('OCR Bukti Transfer Berhasil!', 'success');
+    } else {
+      showToast('Draf formulir dimuat. Silakan lengkapi data transaksi.', 'info');
+    }
   };
 
-  // Triggered when OCR finishes successfully for PLN Token
-  const handleOcrParsedPln = (newPln: PlnTokenData) => {
+  // Triggered when OCR finishes for PLN Token
+  const handleOcrParsedPln = (newPln: PlnTokenData, _img?: string, isFallback?: boolean) => {
+    const { sourceScreenshot, ...cleanData } = newPln;
     const cleanPln: PlnTokenData = {
-      ...newPln,
+      ...cleanData,
       adminFee: 0,
       agentFee: 0,
       totalAmount: Number(newPln.amount) || 0,
     };
     setPlnToken(cleanPln);
-    showToast('OCR Bukti Token PLN Berhasil!', 'success');
+    if (!isFallback) {
+      showToast('OCR Bukti Token PLN Berhasil!', 'success');
+    } else {
+      showToast('Draf token dimuat. Silakan lengkapi data token.', 'info');
+    }
   };
 
-  // Triggered when OCR finishes successfully for Virtual Account
-  const handleOcrParsedVa = (newVa: VirtualAccountData) => {
+  // Triggered when OCR finishes for Virtual Account
+  const handleOcrParsedVa = (newVa: VirtualAccountData, _img?: string, isFallback?: boolean) => {
+    const { sourceScreenshot, ...cleanData } = newVa;
     const cleanVa: VirtualAccountData = {
-      ...newVa,
+      ...cleanData,
       agentFee: 0,
       totalAmount: (Number(newVa.amount) || 0) + (Number(newVa.adminFee) || 0),
     };
     setVirtualAccount(cleanVa);
-    showToast('OCR Bukti Virtual Account Berhasil!', 'success');
+    if (!isFallback) {
+      showToast('OCR Bukti Virtual Account Berhasil!', 'success');
+    } else {
+      showToast('Draf Virtual Account dimuat. Silakan lengkapi data.', 'info');
+    }
   };
 
   // Reset & Sample Handlers
@@ -349,11 +383,6 @@ export default function App() {
           : generateReceiptEscPos(receipt, store, settings);
 
       await printToBluetoothThermal(escPosBytes);
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.8 },
-      });
       showToast('Struk berhasil dicetak ke printer Bluetooth!', 'success');
     } catch (err: any) {
       console.warn('Bluetooth print fallback:', err);

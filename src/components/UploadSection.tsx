@@ -5,9 +5,9 @@ import { SAMPLE_RECEIPTS, SAMPLE_VIRTUAL_ACCOUNTS } from '../utils/sampleData';
 
 interface UploadSectionProps {
   mode: AppMode;
-  onParsed: (receipt: ReceiptData, imageSrc?: string) => void;
-  onParsedPln?: (plnData: PlnTokenData, imageSrc?: string) => void;
-  onParsedVa?: (vaData: VirtualAccountData, imageSrc?: string) => void;
+  onParsed: (receipt: ReceiptData, imageSrc?: string, isFallback?: boolean) => void;
+  onParsedPln?: (plnData: PlnTokenData, imageSrc?: string, isFallback?: boolean) => void;
+  onParsedVa?: (vaData: VirtualAccountData, imageSrc?: string, isFallback?: boolean) => void;
   isProcessing: boolean;
   setIsProcessing: (val: boolean) => void;
   defaultAgentFee: number;
@@ -23,7 +23,6 @@ export function UploadSection({
   defaultAgentFee,
 }: UploadSectionProps) {
   const [dragOver, setDragOver] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanStep, setScanStep] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,26 +61,32 @@ export function UploadSection({
     return () => clearInterval(timer);
   }, [isProcessing, mode]);
 
-  // Compress and optimize image to max 1280px to prevent 413 Payload Too Large on cPanel
+  // Preserve crisp original image for OCR, only scale if extremely large (> 4MB)
   const optimizeImageForOcr = (file: File): Promise<{ base64: string; mimeType: string }> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const rawBase64 = e.target?.result as string;
+        const rawBase64 = (e.target?.result as string) || '';
+        // If file is already under 4MB, use the pristine original image to preserve full sharpness for OCR
+        if (file.size <= 4 * 1024 * 1024) {
+          resolve({ base64: rawBase64, mimeType: file.type || 'image/jpeg' });
+          return;
+        }
+
+        // Only compress very large photos (e.g. 10MB+ raw camera shots)
         const img = new Image();
         img.onload = () => {
-          const MAX_WIDTH = 1280;
-          const MAX_HEIGHT = 1600;
+          const MAX_DIM = 2400; // Keep generous resolution for tiny receipt text
           let width = img.width;
           let height = img.height;
 
-          if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-            if (width / height > MAX_WIDTH / MAX_HEIGHT) {
-              height = Math.round((height * MAX_WIDTH) / width);
-              width = MAX_WIDTH;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
             } else {
-              width = Math.round((width * MAX_HEIGHT) / height);
-              height = MAX_HEIGHT;
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
             }
           }
 
@@ -90,8 +95,11 @@ export function UploadSection({
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
+            // Fill with pure white background to avoid black background bug on transparent PNGs
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            const compressed = canvas.toDataURL('image/jpeg', 0.92);
             resolve({ base64: compressed, mimeType: 'image/jpeg' });
             return;
           }
@@ -124,7 +132,6 @@ export function UploadSection({
       if (!base64Data) {
         throw new Error('Gagal memproses file gambar.');
       }
-      setPreviewImage(base64Data);
 
       try {
         let res: Response;
@@ -138,7 +145,7 @@ export function UploadSection({
               mode: mode,
             }),
           });
-          // Jika 404 (misal mod_rewrite cPanel mati), otomatis coba langsung ke .php
+          // Jika 404/405 (misal di cPanel Apache di mana /api berupa file php)
           if (res.status === 404 || res.status === 405) {
             res = await fetch('/api/parse-receipt.php', {
               method: 'POST',
@@ -150,17 +157,8 @@ export function UploadSection({
               }),
             });
           }
-        } catch {
-          // Jika gagal koneksi rute pertama, coba langsung file .php
-          res = await fetch('/api/parse-receipt.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              imageBase64: base64Data,
-              mimeType: mimeType,
-              mode: mode,
-            }),
-          });
+        } catch (fetchErr: any) {
+          throw new Error('Gagal menghubungi server pemindai: ' + (fetchErr.message || 'Periksa koneksi Anda'));
         }
 
         if (!res.ok) {
@@ -174,215 +172,211 @@ export function UploadSection({
         }
 
         const json = await res.json();
+        const isFallback = Boolean(json.isFallback);
+
         if (json.error) {
           setErrorMessage(json.error);
         } else if (json.warning) {
           setErrorMessage(json.warning);
         }
 
-          const parsed = json.data || {};
+        const parsed = json.data || {};
 
-          // Helper to sanitize text fields
-          const cleanStr = (val: any, fallback: string = ''): string => {
-            if (val === null || val === undefined) return fallback;
-            const s = String(val).trim();
-            if (
-              !s ||
-              s.toLowerCase() === 'null' ||
-              s.toLowerCase() === 'undefined' ||
-              s.toLowerCase() === 'none' ||
-              s.toLowerCase() === 'n/a'
-            ) {
-              return fallback;
-            }
-            return s;
-          };
-
-          // PLN TOKEN PARSING
-          if (mode === 'pln_token' && onParsedPln) {
-            const nominal = Number(parsed.amount) || 100000;
-            let meter = cleanStr(parsed.meterNumber, '');
-            let idpel = cleanStr(parsed.customerId, '');
-            if (!meter && idpel) meter = idpel;
-            if (!idpel && meter) idpel = meter;
-            if (!meter && !idpel) {
-              meter = '32019482910';
-              idpel = '52109823412';
-            }
-
-            let token = cleanStr(parsed.tokenNumber, '');
-            const digits = token.replace(/\D/g, '');
-            if (digits.length === 20) {
-              token = `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)} ${digits.slice(12, 16)} ${digits.slice(16, 20)}`;
-            } else if (!token || token.length < 12) {
-              token = '3819 4820 1928 4719 0192';
-            }
-
-            let kwh = cleanStr(parsed.kwhAmount, '-');
-            if (kwh !== '-' && !kwh.toLowerCase().includes('kwh')) {
-              kwh = `${kwh} kWh`;
-            }
-
-            const newPln: PlnTokenData = {
-              id: 'pln-' + Date.now(),
-              meterNumber: meter,
-              customerId: idpel,
-              customerName: cleanStr(parsed.customerName, 'PELANGGAN PLN'),
-              tariffPower: cleanStr(parsed.tariffPower, 'R1 / 1300 VA'),
-              tokenNumber: token,
-              kwhAmount: kwh,
-              amount: nominal,
-              adminFee: 0,
-              agentFee: 0, // Hasil pertama scan langsung tanpa biaya jasa
-              totalAmount: nominal,
-              transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
-              transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
-              refNumber: cleanStr(parsed.refNumber, 'PLN' + Date.now().toString().slice(-8)),
-              sourceScreenshot: base64Data,
-              createdAt: new Date().toISOString(),
-            };
-            onParsedPln(newPln, base64Data);
-            return;
+        // Helper to sanitize text fields
+        const cleanStr = (val: any, fallback: string = ''): string => {
+          if (val === null || val === undefined) return fallback;
+          const s = String(val).trim();
+          if (
+            !s ||
+            s.toLowerCase() === 'null' ||
+            s.toLowerCase() === 'undefined' ||
+            s.toLowerCase() === 'none' ||
+            s.toLowerCase() === 'n/a'
+          ) {
+            return fallback;
           }
+          return s;
+        };
 
-          // VIRTUAL ACCOUNT PARSING
-          if (mode === 'virtual_account' && onParsedVa) {
-            const nominal = Number(parsed.amount) || 250000;
-            const admin = Number(parsed.adminFee) || 0;
-            const cleanVa = cleanStr(parsed.vaNumber, '1280081298765432').replace(/\s+/g, '');
-            const biller = cleanStr(parsed.billerName, 'VIRTUAL ACCOUNT');
-            const cust = cleanStr(parsed.customerName, 'PELANGGAN VA');
-            const bank = cleanStr(parsed.bankSource, 'BRI');
-
-            const newVa: VirtualAccountData = {
-              id: 'va-' + Date.now(),
-              bankSource: bank,
-              vaProvider: cleanStr(parsed.vaProvider, bank ? `${bank} VA` : 'VIRTUAL ACCOUNT'),
-              vaNumber: cleanVa,
-              billerName: biller,
-              customerName: cust,
-              amount: nominal,
-              adminFee: admin,
-              agentFee: 0,
-              totalAmount: nominal + admin,
-              transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
-              transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
-              refNumber: cleanStr(parsed.refNumber, 'VA' + Date.now().toString().slice(-8)),
-              status: (cleanStr(parsed.status, 'SUKSES').toUpperCase().includes('BERHASIL') ? 'BERHASIL' : 'SUKSES') as any,
-              notes: cleanStr(parsed.notes, ''),
-              sourceScreenshot: base64Data,
-              createdAt: new Date().toISOString(),
-            };
-            onParsedVa(newVa, base64Data);
-            return;
-          }
-
-          // TRANSFER RECEIPT PARSING
+        // PLN TOKEN PARSING
+        if (mode === 'pln_token' && onParsedPln) {
           const nominal = Number(parsed.amount) || 100000;
-          const bankFee = Number(parsed.bankAdminFee) || 0;
-          const total = nominal + bankFee;
+          let meter = cleanStr(parsed.meterNumber, '');
+          let idpel = cleanStr(parsed.customerId, '');
+          if (!meter && idpel) meter = idpel;
+          if (!idpel && meter) idpel = meter;
+          if (!meter && !idpel) {
+            meter = '32019482910';
+            idpel = '52109823412';
+          }
 
-          const srcBank = cleanStr(parsed.bankSource, 'M-BANKING');
-          const destBank = cleanStr(parsed.bankDestination, srcBank !== 'M-BANKING' ? srcBank : 'BANK TUJUAN');
+          let token = cleanStr(parsed.tokenNumber, '');
+          const digits = token.replace(/\D/g, '');
+          if (digits.length === 20) {
+            token = `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)} ${digits.slice(12, 16)} ${digits.slice(16, 20)}`;
+          } else if (!token || token.length < 12) {
+            token = '3819 4820 1928 4719 0192';
+          }
 
-          const newReceipt: ReceiptData = {
-            id: 'receipt-' + Date.now(),
-            bankSource: srcBank,
-            bankDestination: destBank,
-            recipientName: cleanStr(parsed.recipientName, 'PENERIMA TRANSFER'),
-            recipientAccount: cleanStr(parsed.recipientAccount, '-').replace(/\s+/g, ''),
-            senderName: cleanStr(parsed.senderName, ''),
-            senderAccount: cleanStr(parsed.senderAccount, ''),
+          let kwh = cleanStr(parsed.kwhAmount, '-');
+          if (kwh !== '-' && !kwh.toLowerCase().includes('kwh')) {
+            kwh = `${kwh} kWh`;
+          }
+
+          const newPln: PlnTokenData = {
+            id: 'pln-' + Date.now(),
+            meterNumber: meter,
+            customerId: idpel,
+            customerName: cleanStr(parsed.customerName, 'PELANGGAN PLN'),
+            tariffPower: cleanStr(parsed.tariffPower, 'R1 / 1300 VA'),
+            tokenNumber: token,
+            kwhAmount: kwh,
             amount: nominal,
-            bankAdminFee: bankFee,
+            adminFee: 0,
             agentFee: 0,
-            totalAmount: total,
+            totalAmount: nominal,
             transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
             transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
-            refNumber: cleanStr(parsed.refNumber, 'TRX' + Date.now().toString().slice(-8)),
-            transactionType: 'TRANSFER ANTAR BANK',
-            status: (cleanStr(parsed.status, 'BERHASIL').toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
-            notes: cleanStr(parsed.notes, ''),
-            customerName: '',
-            cashierName: 'Kasir',
-            sourceScreenshot: base64Data,
+            refNumber: cleanStr(parsed.refNumber, 'PLN' + Date.now().toString().slice(-8)),
             createdAt: new Date().toISOString(),
           };
-
-          onParsed(newReceipt, base64Data);
-        } catch (apiErr: any) {
-          console.error(apiErr);
-          if (mode === 'pln_token' && onParsedPln) {
-            const fallbackPln: PlnTokenData = {
-              id: 'pln-' + Date.now(),
-              meterNumber: '32019482910',
-              customerId: '52109823412',
-              customerName: 'PELANGGAN PLN',
-              tariffPower: 'R1 / 1300 VA',
-              tokenNumber: '3819 4820 1928 4719 0192',
-              kwhAmount: '65.8 kWh',
-              amount: 100000,
-              adminFee: 0,
-              agentFee: 0,
-              totalAmount: 100000,
-              transactionDate: new Date().toLocaleDateString('id-ID'),
-              transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-              refNumber: 'PLN' + Date.now().toString().slice(-8),
-              sourceScreenshot: base64Data,
-              createdAt: new Date().toISOString(),
-            };
-            onParsedPln(fallbackPln, base64Data);
-          } else if (mode === 'virtual_account' && onParsedVa) {
-            const fallbackVa: VirtualAccountData = {
-              id: 'va-' + Date.now(),
-              bankSource: 'BRI',
-              vaProvider: 'BRIVA',
-              vaNumber: '1280081298765432',
-              billerName: 'SHOPEEPAY INDONESIA',
-              customerName: 'DWI KURNIAWAN',
-              amount: 250000,
-              adminFee: 0,
-              agentFee: 0,
-              totalAmount: 250000,
-              transactionDate: new Date().toLocaleDateString('id-ID'),
-              transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-              refNumber: 'BRIVA' + Date.now().toString().slice(-8),
-              status: 'SUKSES',
-              notes: '',
-              sourceScreenshot: base64Data,
-              createdAt: new Date().toISOString(),
-            };
-            onParsedVa(fallbackVa, base64Data);
-          } else {
-            const fallbackReceipt: ReceiptData = {
-              id: 'receipt-' + Date.now(),
-              bankSource: 'M-BANKING',
-              bankDestination: 'BANK TUJUAN',
-              recipientName: 'PENERIMA TRANSFER',
-              recipientAccount: '-',
-              senderName: '',
-              senderAccount: '',
-              amount: 100000,
-              bankAdminFee: 0,
-              agentFee: 0,
-              totalAmount: 100000,
-              transactionDate: new Date().toLocaleDateString('id-ID'),
-              transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-              refNumber: 'TRX' + Date.now().toString().slice(-8),
-              transactionType: 'TRANSFER ANTAR BANK',
-              status: 'SUKSES',
-              sourceScreenshot: base64Data,
-              createdAt: new Date().toISOString(),
-            };
-            onParsed(fallbackReceipt, base64Data);
-          }
-          setErrorMessage(
-            apiErr.message ||
-            'AI sedang sibuk sementara. Form struk otomatis dibuka di bawah agar Anda dapat menyesuaikan nominal & data.'
-          );
-        } finally {
-          setIsProcessing(false);
+          onParsedPln(newPln, base64Data, isFallback);
+          return;
         }
+
+        // VIRTUAL ACCOUNT PARSING
+        if (mode === 'virtual_account' && onParsedVa) {
+          const nominal = Number(parsed.amount) || 250000;
+          const admin = Number(parsed.adminFee) || 0;
+          const cleanVa = cleanStr(parsed.vaNumber, '1280081298765432').replace(/\s+/g, '');
+          const biller = cleanStr(parsed.billerName, 'VIRTUAL ACCOUNT');
+          const cust = cleanStr(parsed.customerName, 'PELANGGAN VA');
+          const bank = cleanStr(parsed.bankSource, 'BRI');
+
+          const newVa: VirtualAccountData = {
+            id: 'va-' + Date.now(),
+            bankSource: bank,
+            vaProvider: cleanStr(parsed.vaProvider, bank ? `${bank} VA` : 'VIRTUAL ACCOUNT'),
+            vaNumber: cleanVa,
+            billerName: biller,
+            customerName: cust,
+            amount: nominal,
+            adminFee: admin,
+            agentFee: 0,
+            totalAmount: nominal + admin,
+            transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
+            transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
+            refNumber: cleanStr(parsed.refNumber, 'VA' + Date.now().toString().slice(-8)),
+            status: (cleanStr(parsed.status, 'SUKSES').toUpperCase().includes('BERHASIL') ? 'BERHASIL' : 'SUKSES') as any,
+            notes: cleanStr(parsed.notes, ''),
+            createdAt: new Date().toISOString(),
+          };
+          onParsedVa(newVa, base64Data, isFallback);
+          return;
+        }
+
+        // TRANSFER RECEIPT PARSING
+        const nominal = Number(parsed.amount) || 100000;
+        const bankFee = Number(parsed.bankAdminFee) || 0;
+        const total = nominal + bankFee;
+
+        const srcBank = cleanStr(parsed.bankSource, 'M-BANKING');
+        const destBank = cleanStr(parsed.bankDestination, srcBank !== 'M-BANKING' ? srcBank : 'BANK TUJUAN');
+
+        const newReceipt: ReceiptData = {
+          id: 'receipt-' + Date.now(),
+          bankSource: srcBank,
+          bankDestination: destBank,
+          recipientName: cleanStr(parsed.recipientName, 'PENERIMA TRANSFER'),
+          recipientAccount: cleanStr(parsed.recipientAccount, '-').replace(/\s+/g, ''),
+          senderName: cleanStr(parsed.senderName, ''),
+          senderAccount: cleanStr(parsed.senderAccount, ''),
+          amount: nominal,
+          bankAdminFee: bankFee,
+          agentFee: 0,
+          totalAmount: total,
+          transactionDate: cleanStr(parsed.transactionDate, new Date().toLocaleDateString('id-ID')),
+          transactionTime: cleanStr(parsed.transactionTime, new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'),
+          refNumber: cleanStr(parsed.refNumber, 'TRX' + Date.now().toString().slice(-8)),
+          transactionType: 'TRANSFER ANTAR BANK',
+          status: (cleanStr(parsed.status, 'BERHASIL').toUpperCase().includes('SUKSES') ? 'SUKSES' : 'BERHASIL') as any,
+          notes: cleanStr(parsed.notes, ''),
+          customerName: '',
+          cashierName: 'Kasir',
+          createdAt: new Date().toISOString(),
+        };
+
+        onParsed(newReceipt, base64Data, isFallback);
+      } catch (apiErr: any) {
+        console.error(apiErr);
+        if (mode === 'pln_token' && onParsedPln) {
+          const fallbackPln: PlnTokenData = {
+            id: 'pln-' + Date.now(),
+            meterNumber: '32019482910',
+            customerId: '52109823412',
+            customerName: 'PELANGGAN PLN',
+            tariffPower: 'R1 / 1300 VA',
+            tokenNumber: '3819 4820 1928 4719 0192',
+            kwhAmount: '65.8 kWh',
+            amount: 100000,
+            adminFee: 0,
+            agentFee: 0,
+            totalAmount: 100000,
+            transactionDate: new Date().toLocaleDateString('id-ID'),
+            transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+            refNumber: 'PLN' + Date.now().toString().slice(-8),
+            createdAt: new Date().toISOString(),
+          };
+          onParsedPln(fallbackPln, base64Data, true);
+        } else if (mode === 'virtual_account' && onParsedVa) {
+          const fallbackVa: VirtualAccountData = {
+            id: 'va-' + Date.now(),
+            bankSource: 'BRI',
+            vaProvider: 'BRIVA',
+            vaNumber: '1280081298765432',
+            billerName: 'SHOPEEPAY INDONESIA',
+            customerName: 'DWI KURNIAWAN',
+            amount: 250000,
+            adminFee: 0,
+            agentFee: 0,
+            totalAmount: 250000,
+            transactionDate: new Date().toLocaleDateString('id-ID'),
+            transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+            refNumber: 'BRIVA' + Date.now().toString().slice(-8),
+            status: 'SUKSES',
+            notes: '',
+            createdAt: new Date().toISOString(),
+          };
+          onParsedVa(fallbackVa, base64Data, true);
+        } else {
+          const fallbackReceipt: ReceiptData = {
+            id: 'receipt-' + Date.now(),
+            bankSource: 'M-BANKING',
+            bankDestination: 'BANK TUJUAN',
+            recipientName: 'PENERIMA TRANSFER',
+            recipientAccount: '-',
+            senderName: '',
+            senderAccount: '',
+            amount: 100000,
+            bankAdminFee: 0,
+            agentFee: 0,
+            totalAmount: 100000,
+            transactionDate: new Date().toLocaleDateString('id-ID'),
+            transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+            refNumber: 'TRX' + Date.now().toString().slice(-8),
+            transactionType: 'TRANSFER ANTAR BANK',
+            status: 'SUKSES',
+            createdAt: new Date().toISOString(),
+          };
+          onParsed(fallbackReceipt, base64Data, true);
+        }
+        setErrorMessage(
+          apiErr.message ||
+          'AI sedang sibuk atau gambar kurang jelas. Form struk telah disiapkan di bawah agar Anda dapat melengkapi data manual.'
+        );
+      } finally {
+        setIsProcessing(false);
+      }
     } catch (err: any) {
       console.error(err);
       setIsProcessing(false);

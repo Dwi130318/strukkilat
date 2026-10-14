@@ -100,8 +100,19 @@ if (apiKey) {
   });
 }
 
-// Models to try in order of speed and current availability
-const VISION_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+// Models to try in order of current availability, vision capability, and speed
+const VISION_MODELS = [
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview',
+];
+
+// Helper to reliably strip base64 data URL headers
+const extractCleanBase64 = (raw: string): string => {
+  if (!raw) return '';
+  const idx = raw.indexOf('base64,');
+  return idx !== -1 ? raw.substring(idx + 7).trim() : raw.trim();
+};
 
 // API: OCR Proof of Transfer Image
 app.post('/api/parse-receipt', async (req, res) => {
@@ -130,6 +141,29 @@ app.post('/api/parse-receipt', async (req, res) => {
       return s;
     };
 
+    // Helper to safely parse numbers
+    const cleanNumber = (val: any, fallback: number = 0): number => {
+      if (typeof val === 'number') return Math.round(val);
+      if (!val) return fallback;
+      const str = String(val).replace(/[^0-9]/g, '');
+      const parsed = parseInt(str, 10);
+      return isNaN(parsed) || parsed < 0 ? fallback : parsed;
+    };
+
+    // Strict validator to ensure real extraction before breaking model loop
+    const isValidPlnParse = (data: any): boolean => {
+      if (!data || typeof data !== 'object') return false;
+      const tokenDigits = String(data.tokenNumber || '').replace(/\D/g, '');
+      const hasToken = tokenDigits.length >= 16;
+      const hasMeter = String(data.meterNumber || '').replace(/\D/g, '').length >= 10;
+      const hasCustId = String(data.customerId || '').replace(/\D/g, '').length >= 10;
+      const hasCustName =
+        typeof data.customerName === 'string' &&
+        data.customerName.trim().length > 2 &&
+        !['null', 'undefined', 'pelanggan pln'].includes(data.customerName.trim().toLowerCase());
+      return hasToken || (hasMeter && (hasCustName || hasCustId));
+    };
+
     // MODE PLN TOKEN LISTRIK
     if (mode === 'pln_token') {
       const fallbackPln = {
@@ -148,14 +182,15 @@ app.post('/api/parse-receipt', async (req, res) => {
 
       if (!ai) {
         return res.json({
-          success: true,
+          success: false,
+          isFallback: true,
           data: fallbackPln,
           warning:
             'Kunci GEMINI_API_KEY belum terpasang di hosting Anda. Tambahkan GEMINI_API_KEY di file .env atau menu Environment Variables hosting agar fitur OCR AI dapat membaca otomatis.',
         });
       }
 
-      const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+      const cleanBase64 = extractCleanBase64(imageBase64);
       const promptPln = `
 Kamu adalah ahli OCR khusus struk dan bukti pembelian TOKEN LISTRIK PLN PRABAYAR Indonesia (dari PLN Mobile, BCA m-BCA, BRImo, Mandiri Livin', BNI Mobile, DANA, OVO, Shopee, Tokopedia, Indomaret, dll).
 Tolong periksa dan ekstrak data token listrik PLN dari gambar ini secara sangat akurat:
@@ -217,8 +252,9 @@ PENTING:
 
           rawPlnText = response.text || '{}';
           const cleanedText = rawPlnText.replace(/```json\s*|```/g, '').trim();
-          parsedPln = JSON.parse(cleanedText);
-          if (parsedPln && (parsedPln.tokenNumber || parsedPln.customerName)) {
+          const candidate = JSON.parse(cleanedText);
+          if (isValidPlnParse(candidate)) {
+            parsedPln = candidate;
             break;
           }
         } catch (err: any) {
@@ -259,6 +295,7 @@ PENTING:
 
         return res.json({
           success: true,
+          isFallback: false,
           data: {
             meterNumber: meterNum,
             customerId: custId,
@@ -276,9 +313,10 @@ PENTING:
       }
 
       return res.json({
-        success: true,
+        success: false,
+        isFallback: true,
         data: fallbackPln,
-        warning: 'AI sedang sibuk, draf token listrik telah dimuat untuk diedit.',
+        warning: 'AI tidak berhasil membaca nomor token dari gambar ini. Draf formulir token listrik telah dimuat agar Anda dapat menyesuaikan secara manual.',
       });
     }
 
@@ -303,11 +341,28 @@ PENTING:
 
       if (!ai) {
         return res.json({
-          success: true,
+          success: false,
+          isFallback: true,
           data: fallbackVa,
           warning: 'Kunci GEMINI_API_KEY belum terpasang di hosting Anda.',
         });
       }
+
+      const isValidVaParse = (data: any): boolean => {
+        if (!data || typeof data !== 'object') return false;
+        const vaDigits = String(data.vaNumber || '').replace(/\D/g, '');
+        const hasVa = vaDigits.length >= 8 && vaDigits !== '1280081298765432';
+        const hasAmount = Number(data.amount) > 0;
+        const hasBiller =
+          typeof data.billerName === 'string' &&
+          data.billerName.trim().length > 2 &&
+          !['null', 'undefined', 'virtual account'].includes(data.billerName.trim().toLowerCase());
+        const hasCust =
+          typeof data.customerName === 'string' &&
+          data.customerName.trim().length > 2 &&
+          !['null', 'undefined', 'dwi kurniawan', 'pelanggan va'].includes(data.customerName.trim().toLowerCase());
+        return hasVa || (hasAmount && (hasBiller || hasCust));
+      };
 
       const promptVa = `
 Kamu adalah ahli OCR khusus struk dan bukti pembayaran VIRTUAL ACCOUNT di Indonesia (BRIVA BRI, BCA Virtual Account, Mandiri VA Livin', BNI VA, Permata VA, ShopeePay VA, Tokopedia VA, DANA VA, dll).
@@ -323,18 +378,12 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
 9. refNumber: Nomor referensi transaksi atau ID transaksi unik.
 10. status: Status transaksi (SUKSES/BERHASIL).
 11. notes: Catatan jika ada.
+
+DILARANG menggunakan kata "null" atau "undefined". Kosongkan jika tidak ada.
 `;
 
-      const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+      const cleanBase64 = extractCleanBase64(imageBase64);
       let parsedVa: any = null;
-
-      const cleanNumber = (val: any, fallback: number = 100000): number => {
-        if (typeof val === 'number') return Math.round(val);
-        if (!val) return fallback;
-        const str = String(val).replace(/[^0-9]/g, '');
-        const parsed = parseInt(str, 10);
-        return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
-      };
 
       for (const modelName of VISION_MODELS) {
         try {
@@ -352,7 +401,8 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
               ],
             },
             config: {
-              systemInstruction: 'Kamu adalah asisten OCR spesialis bukti pembayaran Virtual Account Indonesia.',
+              systemInstruction:
+                'Kamu adalah asisten OCR spesialis bukti pembayaran Virtual Account Indonesia. Berikan output terstruktur JSON dengan data seakurat mungkin.',
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.OBJECT,
@@ -375,8 +425,11 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
 
           const rawText = response.text || '{}';
           const cleanedText = rawText.replace(/```json\s*|```/g, '').trim();
-          parsedVa = JSON.parse(cleanedText);
-          if (parsedVa) break;
+          const candidate = JSON.parse(cleanedText);
+          if (isValidVaParse(candidate)) {
+            parsedVa = candidate;
+            break;
+          }
         } catch (err: any) {
           console.warn(`Model ${modelName} failed on VA:`, err.message || err);
         }
@@ -386,6 +439,7 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
         const cleanVaNo = cleanField(parsedVa.vaNumber, fallbackVa.vaNumber).replace(/\s+/g, '');
         return res.json({
           success: true,
+          isFallback: false,
           data: {
             bankSource: cleanField(parsedVa.bankSource, fallbackVa.bankSource),
             vaProvider: cleanField(parsedVa.bankSource ? `${parsedVa.bankSource} VA` : 'VIRTUAL ACCOUNT', 'BRIVA'),
@@ -404,13 +458,16 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
       }
 
       return res.json({
-        success: true,
+        success: false,
+        isFallback: true,
         data: fallbackVa,
-        warning: 'AI sedang sibuk, draf Virtual Account telah dimuat.',
+        warning: 'AI tidak berhasil membaca nomor Virtual Account dari gambar ini. Draf formulir telah dimuat untuk disesuaikan secara manual.',
       });
     }
 
-    // Default fallback draft in case AI is busy or image is difficult to read
+    // =========================================================================
+    // MODE 1: TRANSFER ANTAR BANK PARSING
+    // =========================================================================
     const fallbackDraft = {
       bankSource: 'M-BANKING',
       bankDestination: 'BANK PENERIMA',
@@ -423,22 +480,22 @@ Tolong periksa dan ekstrak data pembayaran Virtual Account dari gambar ini secar
       transactionDate: now.toLocaleDateString('id-ID'),
       transactionTime: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
       refNumber: 'TRX' + Date.now().toString().slice(-8),
-      transactionType: 'TRANSFER ONLINE',
+      transactionType: 'TRANSFER ANTAR BANK',
       status: 'BERHASIL',
       notes: 'Transfer Dana',
     };
 
     if (!ai) {
       return res.json({
-        success: true,
+        success: false,
+        isFallback: true,
         data: fallbackDraft,
         warning:
           'Kunci GEMINI_API_KEY belum terpasang di hosting Anda. Tambahkan GEMINI_API_KEY di file .env atau menu Environment Variables hosting agar fitur OCR AI dapat membaca otomatis.',
       });
     }
 
-    // Clean base64 string
-    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
+    const cleanBase64 = extractCleanBase64(imageBase64);
 
     const promptText = `
 Kamu adalah ahli OCR khusus struk dan bukti transfer uang untuk SEMUA BANK & E-WALLET Indonesia:
@@ -450,35 +507,35 @@ Kamu adalah ahli OCR khusus struk dan bukti transfer uang untuk SEMUA BANK & E-W
 - Bank Jago, SeaBank, Allo Bank, Permata, Danamon, CIMB Niaga, BJB, Bank Daerah (Bank Nagari, Bank Jateng, Bank Jatim, Bank Sumut, dll)
 - DANA, GoPay, OVO, ShopeePay, LinkAja, Flip
 
-Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas dan fleksibel:
+Tolong periksa dan ekstrak data transfer dari gambar bukti transaksi ini secara sangat cerdas dan teliti:
 
 1. bankSource: Nama bank / e-wallet pengirim.
-   - Perhatikan logo di pojok atas/bawah bukti transfer.
-   - Biru BCA / tulisan m-BCA / myBCA / m-Transfer -> "BCA"
-   - Emas / kuning / pita Livin' -> "MANDIRI (LIVIN')"
-   - Orange / toska BNI / wondr -> "BNI"
-   - Biru BRI / BRImo -> "BRI"
-   - Hijau toska BSI -> "BSI"
-   - Biru DANA -> "DANA", Hijau GoPay -> "GOPAY", Ungu OVO -> "OVO", Orange ShopeePay -> "SHOPEEPAY", Orange SeaBank -> "SEABANK".
+   - Perhatikan logo atau header di gambar.
+   - Tulisan m-BCA / myBCA / BCA -> "BCA"
+   - Livin' / Mandiri -> "MANDIRI (LIVIN')"
+   - BNI / wondr -> "BNI"
+   - BRI / BRImo -> "BRI"
+   - BSI -> "BSI"
+   - DANA -> "DANA", GoPay -> "GOPAY", OVO -> "OVO", ShopeePay -> "SHOPEEPAY", SeaBank -> "SEABANK".
 
 2. bankDestination: Nama bank atau e-wallet tujuan transfer (misal: "BRI", "BCA", "MANDIRI", "BNI", "DANA", "SHOPEEPAY", dll).
-   - Jika transfer ke SESAMA BANK (misal sesama BCA, sesama Mandiri), isi bankDestination sama dengan bankSource (misal: "BCA" atau "MANDIRI").
+   - Jika transfer ke SESAMA BANK (misal sesama BCA atau sesama BRI), isi bankDestination sama dengan bankSource.
 
-3. recipientName: Nama lengkap pemilik rekening penerima transfer.
+3. recipientName: Nama lengkap pemilik rekening penerima transfer yang tertera pada bukti transfer.
 
-4. recipientAccount: Nomor rekening atau nomor HP/Virtual Account penerima (ambil digit angkanya, rapat tanpa spasi).
+4. recipientAccount: Nomor rekening atau nomor HP penerima (ambil semua digit angkanya, rapat tanpa spasi).
 
 5. senderName: Nama pengirim uang (jika ada pada struk).
 
 6. senderAccount: Nomor rekening pengirim (jika ada pada struk).
 
-7. amount: Nominal uang transfer utama (harus berupa angka integer murni tanpa Rp/titik/koma, contoh: 150000).
+7. amount: Nominal uang transfer utama (harus berupa angka integer murni tanpa Rp/titik/koma, contoh: 150000, 500000, 1000000).
 
-8. bankAdminFee: Biaya admin transaksi jika tertera (misal: 0, 2500, atau 6500). Jika gratis atau tidak tertera biaya admin, tulis 0.
+8. bankAdminFee: Biaya admin transaksi jika tertera (misal: 0, 2500, atau 6500). Jika tidak tertera atau gratis, tulis 0.
 
-9. transactionDate: Tanggal transaksi (format DD/MM/YYYY, misal "09/10/2026").
+9. transactionDate: Tanggal transaksi (format DD/MM/YYYY, misal "13/10/2026").
 
-10. transactionTime: Waktu/jam transaksi jika tertera (misal "14:25:08 WIB" atau "14:25").
+10. transactionTime: Waktu/jam transaksi jika tertera (misal "14:25:08 WIB" atau "14:25 WIB").
 
 11. refNumber: Nomor referensi transaksi, No Jurnal, No Bukti, atau Transaction ID.
 
@@ -487,19 +544,38 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
 13. status: Status transaksi, utamakan "BERHASIL" atau "SUKSES".
 
 14. notes: Berita transfer, catatan, atau keterangan jika ada.
+
+PENTING: DILARANG mengisi kata "null" atau "undefined". Kosongkan ("") jika data tidak tertera.
 `;
+
+    const isValidTransferParse = (data: any): boolean => {
+      if (!data || typeof data !== 'object') return false;
+      const hasAmount = Number(data.amount) > 0;
+      const hasRecipient =
+        typeof data.recipientName === 'string' &&
+        data.recipientName.trim().length > 1 &&
+        !['null', 'undefined', 'penerima transfer'].includes(data.recipientName.trim().toLowerCase());
+      const hasAccount =
+        typeof data.recipientAccount === 'string' &&
+        data.recipientAccount.trim().length > 3 &&
+        !['null', 'undefined', '-', '1234567890'].includes(data.recipientAccount.trim().toLowerCase());
+      const hasBank =
+        typeof data.bankSource === 'string' &&
+        data.bankSource.trim().length > 1 &&
+        !['null', 'undefined', 'm-banking', 'bank asal'].includes(data.bankSource.trim().toLowerCase());
+      const hasRef =
+        typeof data.refNumber === 'string' &&
+        data.refNumber.trim().length > 4 &&
+        !['null', 'undefined'].includes(data.refNumber.trim().toLowerCase());
+      return (
+        (hasAmount && (hasRecipient || hasAccount || hasBank)) ||
+        (hasRecipient && (hasAccount || hasBank)) ||
+        (hasAccount && hasRef)
+      );
+    };
 
     let lastError: any = null;
     let parsedData: any = null;
-
-    // Helper to safely parse numbers
-    const cleanNumber = (val: any, fallback: number = 100000): number => {
-      if (typeof val === 'number') return Math.round(val);
-      if (!val) return fallback;
-      const str = String(val).replace(/[^0-9]/g, '');
-      const parsed = parseInt(str, 10);
-      return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
-    };
 
     // Try models with fallback
     for (const modelName of VISION_MODELS) {
@@ -521,7 +597,7 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
           },
           config: {
             systemInstruction:
-              'Kamu adalah asisten OCR spesialis bukti transfer perbankan dan dompet digital Indonesia. Berikan output terstruktur JSON dengan data seakurat mungkin dari gambar. Bersikaplah fleksibel dalam mendeteksi tata letak bukti transfer dari semua bank di Indonesia.',
+              'Kamu adalah asisten OCR spesialis bukti transfer perbankan dan dompet digital Indonesia. Berikan output terstruktur JSON dengan data seakurat mungkin dari gambar. Ekstrak nama bank, nama penerima, nomor rekening, dan nominal transfer secara tepat.',
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -541,15 +617,16 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
                 status: { type: Type.STRING, description: 'Status transaksi' },
                 notes: { type: Type.STRING, description: 'Berita atau catatan transaksi' },
               },
+              required: ['recipientName', 'amount'],
             },
           },
         });
 
         const rawText = response.text || '{}';
-        // Clean markdown blocks if any
         const cleanedText = rawText.replace(/```json\s*|```/g, '').trim();
-        parsedData = JSON.parse(cleanedText);
-        if (parsedData) {
+        const candidate = JSON.parse(cleanedText);
+        if (isValidTransferParse(candidate)) {
+          parsedData = candidate;
           break; // successfully parsed!
         }
       } catch (err: any) {
@@ -566,6 +643,7 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
 
       return res.json({
         success: true,
+        isFallback: false,
         data: {
           bankSource: source,
           bankDestination: destination,
@@ -585,17 +663,20 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
       });
     }
 
-    // If all models failed or were busy, return graceful draft so user can still edit & print!
+    // If all models failed or image was not readable
     console.error('All AI models failed, using fallback draft:', lastError);
     return res.json({
-      success: true,
+      success: false,
+      isFallback: true,
       data: fallbackDraft,
-      warning: 'Layanan AI sedang sibuk sementara. Data draf otomatis telah dimuat, silakan sesuaikan nominal dan penerima.',
+      warning:
+        'AI tidak berhasil mendeteksi data transfer dari gambar ini. Pastikan foto struk jelas dan tidak terpotong, atau Anda dapat menyesuaikan data pada formulir di bawah.',
     });
   } catch (error: any) {
     console.error('Fatal error in parse-receipt endpoint:', error);
     return res.json({
-      success: true,
+      success: false,
+      isFallback: true,
       data: {
         bankSource: 'M-BANKING',
         bankDestination: 'BANK PENERIMA',
@@ -606,7 +687,7 @@ Tolong periksa dan ekstrak data transfer dari gambar ini secara sangat cerdas da
         transactionDate: new Date().toLocaleDateString('id-ID'),
         transactionTime: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
         refNumber: 'TRX' + Date.now().toString().slice(-8),
-        transactionType: 'TRANSFER ONLINE',
+        transactionType: 'TRANSFER ANTAR BANK',
         status: 'BERHASIL',
       },
       warning: 'Gagal memproses gambar otomatis. Data draf telah disiapkan untuk Anda edit.',
